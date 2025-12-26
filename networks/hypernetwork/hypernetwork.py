@@ -72,6 +72,7 @@ class PairedNetwork(nn.Module):
     
 class SingleNetwork(nn.Module):
     def __init__(self, net_in_dim, net_out_dim, net_arch, net_act):
+        super().__init__()
         self.net = mlp_builder(in_dim = net_in_dim, net_architecture = net_arch, out_dim = net_out_dim,
                                nonlinearity_name = net_act)
         
