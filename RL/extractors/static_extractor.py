@@ -39,7 +39,7 @@ class StaticObjectExtractor(nn.Module):
         
 class GTShapesObjectExtractor(nn.Module):
     def __init__(self):
-        pass
+        super().__init__()
 
     def optimize_oe(self, obs, next_obs):
         pass
@@ -49,7 +49,7 @@ class GTShapesObjectExtractor(nn.Module):
 
 class IdentityExtractor(nn.Module):
     def __init__(self):
-        pass
+        super().__init__()
 
     def optimize_oe(self, obs, next_obs):
         pass
