@@ -1,7 +1,8 @@
 env:
   name: "decoupled_shapes"
   normalizer_type: 'shapes'
-  env_kwargs: null
+  env_kwargs:
+    num_objects_range: [4, 4]
 
 trainer_args:
   trans_optimization_epochs: 50

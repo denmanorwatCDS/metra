@@ -1,7 +1,6 @@
 globals:
   device: 'cuda'
   sample_cpu: true
-  seed: 42
   n_thread: 1
   n_parallel: 8
   mlp_arch: [512, 512]

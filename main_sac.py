@@ -33,6 +33,7 @@ def fetch_config():
     parser = argparse.ArgumentParser(prog='Metra')
     parser.add_argument('--default_config')
     parser.add_argument('--env_config')
+    parser.add_argument('--seed')
     args = parser.parse_args()
 
     config_folder = str(pathlib.Path(__file__).parent.resolve()) + '/configs'
@@ -43,6 +44,7 @@ def fetch_config():
     env_config_path = config_folder + '/' + args.env_config
     env_config = omegaconf.OmegaConf.load(env_config_path)
     rl_config.merge_with(env_config)
+    rl_config.globals.seed = int(args.seed)
     assert rl_config.globals.seed > 3, 'Seeds 0, 1, 2, 3 reserved for evaluation'
 
     return rl_config
@@ -84,7 +86,7 @@ def make_env(env_name, env_kwargs, max_path_length, seed, frame_stack, normalize
     elif env_name == 'decoupled_shapes':
         from envs.shapes.push_env.push import PushEnv
         env = PushEnv(seed = seed, arena_size = 3., render_mode = 'state', 
-                      render_info = render_info, num_objects_range = env_kwargs.num_object_range)
+                      render_info = render_info, num_objects_range = env_kwargs.num_objects_range)
     elif env_name.startswith('dmc'):
         from envs.custom_dmc_tasks import dmc
         from envs.custom_dmc_tasks.pixel_wrappers import RenderWrapper
