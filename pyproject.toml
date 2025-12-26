@@ -28,6 +28,7 @@ dependencies = [
     "scikit-image==0.19.3",
     "scikit-learn==1.0.2",
     "scipy==1.10.1",
+    "spriteworld==1.0.2",
     "swig==3.0.12",
     "torch==2.0.1",
     "tyro==0.8.5",
