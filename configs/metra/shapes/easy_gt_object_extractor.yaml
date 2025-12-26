@@ -1,0 +1,20 @@
+env:
+  name: "decoupled_shapes"
+  normalizer_type: 'shapes'
+  env_kwargs:
+    num_objects_range: [1, 1]
+
+trainer_args:
+  trans_optimization_epochs: 50
+
+replay_buffer:
+  common:
+    max_transitions: 1000000
+
+static_object_extractor:
+  type: 'gt'
+
+skill:
+  name: "metra"
+  discrete: false
+  dim_option: 2

@@ -69,3 +69,12 @@ class PairedNetwork(nn.Module):
         is_agent = torch.all((parameterizer == torch.tensor([1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 0.06]).cuda()), dim=-1)
         is_agent = torch.reshape(is_agent, (-1, 1))
         return torch.where(condition = is_agent, input = agent_out, other = shape_out)
+    
+class SingleNetwork(nn.Module):
+    def __init__(self, net_in_dim, net_out_dim, net_arch, net_act):
+        self.net = mlp_builder(in_dim = net_in_dim, net_architecture = net_arch, out_dim = net_out_dim,
+                               nonlinearity_name = net_act)
+        
+    def forward(self, obs, parameterizer):
+        feat = self.net(obs)
+        return feat

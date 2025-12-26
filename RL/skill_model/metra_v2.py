@@ -3,10 +3,9 @@ import torch
 import numpy as np
 from matplotlib import cm
 from networks.poolers.poolers import get_pooler_network
-from networks.hypernetwork.hypernetwork import HyperNetwork, PairedNetwork
+from networks.hypernetwork.hypernetwork import HyperNetwork, PairedNetwork, SingleNetwork
 from torch.optim import AdamW
 from eval_utils.eval_utils import get_option_colors
-from networks.utils.mlp_builder import mlp_builder
 
 class METRA(torch.nn.Module):
     def __init__(
@@ -49,43 +48,28 @@ class METRA(torch.nn.Module):
     def _init_trajectory_encoder(self, obs_dim, skill_dim, net_hidden_sizes, net_hidden_nonlinearity, 
                                  hypernet_param_dim, hypernet_hidden_act, hypernet_hidden_sizes, hypernet_compressed_dim,
                                  hypernet_type):
-        self.enc, self.dec = None, None
-        if (hypernet_param_dim is None) or (hypernet_hidden_sizes is None) or (hypernet_compressed_dim is None):
-            self._traj_encoder = mlp_builder(in_dim = obs_dim, 
-                                             net_architecture = net_hidden_sizes,
-                                             out_dim = skill_dim,
-                                             nonlinearity_name = net_hidden_nonlinearity).to(self.device)
-            self._use_hyper_net = False
-        elif hypernet_type in ['classic', 'stupid']:
-            if hypernet_type == 'classic':
-                self._traj_encoder = HyperNetwork(parameterizer_dim = hypernet_param_dim, 
-                                                  net_in_dim = obs_dim, net_out_dim = skill_dim,
-                                                  hypernet_arch = hypernet_hidden_sizes,
-                                                  hypernet_act = hypernet_hidden_act,
-                                                  compressed_dim = hypernet_compressed_dim,
-                                                  net_arch = net_hidden_sizes, 
-                                                  net_act = net_hidden_nonlinearity).to(self.device)
-            elif hypernet_type == 'stupid':
-                self._traj_encoder = PairedNetwork(net_in_dim = obs_dim, net_out_dim = skill_dim, 
-                                                   net_arch = net_hidden_sizes, 
-                                                   net_act = net_hidden_nonlinearity).to(self.device)
-            def enc(x):
-                return x[..., :-2]
+        if hypernet_type == 'classic':
+            self._traj_encoder = HyperNetwork(parameterizer_dim = hypernet_param_dim, 
+                                              net_in_dim = obs_dim, net_out_dim = skill_dim,
+                                              hypernet_arch = hypernet_hidden_sizes,
+                                              hypernet_act = hypernet_hidden_act,
+                                              compressed_dim = hypernet_compressed_dim,
+                                              net_arch = net_hidden_sizes, 
+                                              net_act = net_hidden_nonlinearity).to(self.device)
+        elif hypernet_type == 'gt':
+            self._traj_encoder = PairedNetwork(net_in_dim = obs_dim, net_out_dim = skill_dim, 
+                                                net_arch = net_hidden_sizes, 
+                                                net_act = net_hidden_nonlinearity).to(self.device)
+        elif hypernet_type == 'single':
+            self._traj_encoder = SingleNetwork(net_in_dim = obs_dim, net_out_dim = skill_dim, 
+                                               net_arch = net_hidden_sizes, 
+                                               net_act = net_hidden_nonlinearity).to(self.device)
+        else:
+            assert False, 'Unknown type of hypernetwork provided'
             
-            def dec(compressed_x):
-                shape_without_features = compressed_x.shape[:-1]
-                return torch.cat([compressed_x, torch.zeros(size = shape_without_features + (2,)).to(self.device)], 
-                                 axis = -1)
-            
-            self.enc, self.dec, self._use_hyper_net = enc, dec, True
-            
-    def call_traj_encoder(self, object_representation, observations, obj_idxs):
-        batch_size = obj_idxs.shape[0]
-        if self._use_hyper_net:
-            parameter = self.enc(observations[torch.arange(batch_size), obj_idxs]).detach()
-            return self._traj_encoder(object_representation, parameter)
-        
-        return self._traj_encoder(object_representation)
+    def call_traj_encoder(self, object_representation, static_objects, obj_idxs):
+        batch_size = object_representation.shape[0]
+        return self._traj_encoder(object_representation, static_objects[torch.arange(batch_size), obj_idxs])
 
     def sample_options_and_obj_idxs(self, batch_size, traj_len, skills_per_traj, n_objects):
         assert traj_len % skills_per_traj == 0, 'Maximal length of trajectory must be divisible by skills per trajectory'
@@ -101,21 +85,20 @@ class METRA(torch.nn.Module):
 
         return options, obj_idxs
     
-    def train_components(self, observations, next_observations, options, obj_idxs):
+    def train_components(self, observations, next_observations, static_objects, 
+                         options, obj_idxs):
         cur_obj_repr = self.fetch_single_vector_representation(observations, obj_idxs)
         next_obj_repr = self.fetch_single_vector_representation(next_observations, obj_idxs)
         te_logs, loss_te, cst_penalty = self._update_loss_te(cur_obj_repr = cur_obj_repr, next_obj_repr = next_obj_repr, 
-                                                             options = options,
+                                                             static_objects = static_objects, options = options,
                                                              observations = observations, next_observations = next_observations, 
                                                              obj_idxs = obj_idxs)
         dual_logs, loss_dual_lam = self._update_loss_dual_lam(cst_penalty)
-        consistency_loss = self._update_loss_static(observations, next_observations, obj_idxs)
         
         rew_logs, cur_z, next_z, rewards = self._update_rewards(cur_obj_repr = cur_obj_repr, next_obj_repr = next_obj_repr, 
-                                                                options = options,
-                                                                observations = observations, next_observations = next_observations,
+                                                                static_objects = static_objects, options = options,
                                                                 obj_idxs = obj_idxs)
-        loss = loss_te + loss_dual_lam + consistency_loss
+        loss = loss_te + loss_dual_lam
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -125,17 +108,17 @@ class METRA(torch.nn.Module):
     def fetch_single_vector_representation(self, observations, obj_idxs):
         return self.pooler(observations, obj_idxs)
     
-    def fetch_encoder_representation(self, observations, obj_idxs):
+    def fetch_encoder_representation(self, observations, static_objects, obj_idxs):
         with torch.no_grad():
             obj_repr = self.pooler(observations, obj_idxs)
-            mean = self.call_traj_encoder(object_representation = obj_repr, observations = observations,
+            mean = self.call_traj_encoder(object_representation = obj_repr, static_objects = static_objects,
                                           obj_idxs = obj_idxs)
         mean = mean.cpu().numpy()
         std = np.ones_like(mean)
         samples = mean
         return mean, std, samples
     
-    def calculate_rewards(self, observations, next_observations, options, obj_idxs):
+    def calculate_rewards(self, observations, next_observations, static_objects, options, obj_idxs):
         traj_qty, traj_length = observations.shape[:2]
         observations = torch.from_numpy(observations.reshape((-1,) + observations.shape[2:])).to(self.device)
         next_observations = torch.from_numpy(next_observations.reshape((-1,) + next_observations.shape[2:])).to(self.device)
@@ -144,16 +127,16 @@ class METRA(torch.nn.Module):
         with torch.no_grad():
             cur_obj_repr = self.fetch_single_vector_representation(observations, obj_idxs)
             next_obj_repr = self.fetch_single_vector_representation(next_observations, obj_idxs)
-            rewards = self._update_rewards(cur_obj_repr, next_obj_repr, options,
-                                           observations, next_observations, obj_idxs)[3]
+            rewards = self._update_rewards(cur_obj_repr, next_obj_repr, static_objects, options,
+                                           obj_idxs)[3]
         return rewards.reshape((traj_qty, traj_length) + rewards.shape[2:]).cpu().numpy()
     
-    def _update_rewards(self, cur_obj_repr, next_obj_repr, options,
-                        observations, next_observations, obj_idxs):
+    def _update_rewards(self, cur_obj_repr, next_obj_repr,
+                        static_objects, options, obj_idxs):
         logs = {}
-        cur_z = self.call_traj_encoder(object_representation = cur_obj_repr, observations = observations,
+        cur_z = self.call_traj_encoder(object_representation = cur_obj_repr, static_objects = static_objects,
                                        obj_idxs = obj_idxs)
-        next_z = self.call_traj_encoder(object_representation = next_obj_repr, observations = next_observations,
+        next_z = self.call_traj_encoder(object_representation = next_obj_repr, static_objects = static_objects,
                                         obj_idxs = obj_idxs)
         target_z = next_z - cur_z
         if self.discrete:
@@ -169,13 +152,12 @@ class METRA(torch.nn.Module):
         })
         return logs, cur_z, next_z, rewards
     
-    def _update_loss_te(self, cur_obj_repr, next_obj_repr, options,
+    def _update_loss_te(self, cur_obj_repr, next_obj_repr, static_objects, options,
                         observations, next_observations, obj_idxs):
         logs, cur_z, next_z, rewards = self._update_rewards(cur_obj_repr = cur_obj_repr, 
                                                             next_obj_repr = next_obj_repr,
+                                                            static_objects = static_objects,
                                                             options = options, 
-                                                            observations = observations,
-                                                            next_observations = next_observations,
                                                             obj_idxs = obj_idxs)
         
         dual_lam = self.log_dual_lam.exp()
@@ -204,15 +186,6 @@ class METRA(torch.nn.Module):
             'LossDualLam': loss_dual_lam.detach(),
         })
         return logs, loss_dual_lam
-    
-    def _update_loss_static(self, cur_obs, next_obs, obj_idxs):
-        batch_size, *_ = obj_idxs.shape
-        cur_obj, next_obj = cur_obs[torch.arange(batch_size), obj_idxs], next_obs[torch.arange(batch_size), obj_idxs]
-        enc_cur_obj, enc_next_obj = self.enc(cur_obj), self.enc(next_obj)
-        dec_cur_obj, dec_next_obj = self.dec(enc_cur_obj), self.dec(enc_next_obj)
-        diff = torch.mean((cur_obj - dec_cur_obj)**2, axis=-1) + torch.mean((next_obj - dec_next_obj)**2, axis=-1) +\
-            torch.mean(2*(enc_cur_obj - enc_next_obj)**2, axis=-1)
-        return torch.mean(diff, dim = 0)
 
     def sample_eval_options(self, num_random_trajectories, traj_length):
         random_options, option_colors = None, None

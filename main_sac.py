@@ -10,6 +10,7 @@ from envs.utils.consistent_normalized_env import consistent_normalize, get_norma
 from envs.mujoco.obs_wrapper import ExpanderWrapper
 from ReplayBuffers.path_replay_buffer import PathBuffer
 from RL.skill_model.metra_v2 import METRA
+from RL.extractors.static_extractor import get_object_extractor
 from RL.policies.sac import SAC
 from RL.policies.ppo import PPO
 from gym.vector import AsyncVectorEnv, SyncVectorEnv
@@ -83,11 +84,7 @@ def make_env(env_name, env_kwargs, max_path_length, seed, frame_stack, normalize
     elif env_name == 'decoupled_shapes':
         from envs.shapes.push_env.push import PushEnv
         env = PushEnv(seed = seed, arena_size = 3., render_mode = 'state', 
-                      render_info = render_info, num_objects_range = [1, 1])
-    elif env_name == 'easy_decoupled_shapes':
-        from envs.shapes.push_env.push import PushEnv
-        env = PushEnv(seed = seed, arena_size = 3., render_mode = 'simple_state', 
-                      render_info = render_info, num_objects_range = [1, 1])
+                      render_info = render_info, num_objects_range = env_kwargs.num_object_range)
     elif env_name.startswith('dmc'):
         from envs.custom_dmc_tasks import dmc
         from envs.custom_dmc_tasks.pixel_wrappers import RenderWrapper
@@ -181,10 +178,18 @@ def run():
                   option_size = config.skill.dim_option, discrete = config.skill.discrete, 
                   unit_length = config.skill.unit_length, device = config.globals.device,
                   dual_slack = config.skill.dual_slack)
+    
+    static_object_extractor = get_object_extractor(type = config.static_object_extractor.type,
+                                                   lr = config.static_object_extractor.lr, 
+                                                   wd = config.static_object_extractor.wd, 
+                                                   in_dim = env.observation_space.shape[1],
+                                                   enc_arch = config.static_object_extractor.net.hidden_sizes,
+                                                   enc_act = config.static_object_extractor.net.hidden_nonlinearity,
+                                                   out_dim = config.skill.trajectory_encoder.hypernet.parameterizer_dim).to(config.globals.device)
     env.close()
     
-    train_cycle(config.trainer_args, agent = rl_algo, skill_model = metra, replay_buffer = replay_buffer,
-                make_env_fn = make_seeded_env, seed = config.globals.seed, comet_logger = exp)
+    train_cycle(config.trainer_args, agent = rl_algo, skill_model = metra, static_object_extractor = static_object_extractor, 
+                replay_buffer = replay_buffer, make_env_fn = make_seeded_env, seed = config.globals.seed, comet_logger = exp)
 
 def collect_train_trajectories(env, agent, skill_model, 
                                trajectories_length, skills_per_traj = None, n_objects = None, trajectories_qty = None):
@@ -243,8 +248,8 @@ def prepare_batch(batch, device = 'cuda'):
         data[key] = torch.from_numpy(value).to(device)
     return data
 
-def train_cycle(trainer_config, agent, skill_model, replay_buffer, make_env_fn, seed, 
-                comet_logger):
+def train_cycle(trainer_config, agent, skill_model, static_object_extractor, 
+                replay_buffer, make_env_fn, seed, comet_logger):
     n_objects = make_env_fn(seed = 0).n_obj
     env = AsyncVectorEnv([lambda: make_env_fn(seed = (seed + i)) for i in range(trainer_config.n_parallel)], context='spawn')
     
@@ -269,8 +274,11 @@ def train_cycle(trainer_config, agent, skill_model, replay_buffer, make_env_fn, 
         for i in range(trainer_config.trans_optimization_epochs):
             batch = replay_buffer.sample_transitions()
             batch = prepare_batch(batch)
+            static_object_extractor.optimize_oe(batch['observations'], batch['next_observations'])
+            extracted_objects = static_object_extractor.extract(batch['observations'])
             logs, rewards = skill_model.train_components(observations = batch['observations'], 
                                                          next_observations = batch['next_observations'],
+                                                         static_objects = extracted_objects,
                                                          options = batch['options'],
                                                          obj_idxs = batch['obj_idxs'])
             skill_stats.save_iter(logs)
@@ -282,8 +290,8 @@ def train_cycle(trainer_config, agent, skill_model, replay_buffer, make_env_fn, 
         
         if agent.on_policy:
             trajs['rewards'] = skill_model.calculate_rewards(observations = trajs['observations'], 
-                                                    next_observations = trajs['next_observations'],
-                                                    options = trajs['options'], obj_idxs = trajs['obj_idxs'])
+                                                             next_observations = trajs['next_observations'],
+                                                             options = trajs['options'], obj_idxs = trajs['obj_idxs'])
             trajs['values'] = agent.get_critic_value(trajs['observations'], trajs['options'], trajs['obj_idxs'])
             trajs['next_values'] = agent.get_critic_value(trajs['next_observations'], trajs['options'], trajs['obj_idxs'])
             replay_buffer.update_rollout_buffer(trajs)
@@ -306,7 +314,7 @@ def train_cycle(trainer_config, agent, skill_model, replay_buffer, make_env_fn, 
         
         agent.eval()
         if (prev_cur_step // trainer_config.eval_frequency) < (cur_step // trainer_config.eval_frequency):
-            eval_metrics(make_env_fn, agent, skill_model, 
+            eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
                          num_random_trajectories = 48, traj_length = trainer_config.max_path_length,
                          gamma = replay_buffer.discount, sample_processor = replay_buffer.preprocess_data,
                          device = "cuda:0", comet_logger = comet_logger, step = cur_step)
@@ -370,8 +378,8 @@ def render_phi_plot(skill_model, random_trajectories, eval_color, sample_process
     plt.close(fig)
     return phi_img
 
-def eval_metrics(make_env_fn, agent, skill_model, num_random_trajectories, traj_length, gamma,
-                 sample_processor, device, comet_logger, step):
+def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor, 
+                 num_random_trajectories, traj_length, gamma, sample_processor, device, comet_logger, step):
     example_env = make_env_fn(seed = 0)
     traj_env_maker = lambda: AsyncVectorEnv([lambda: make_env_fn(seed = i) for i in range(4)], context='spawn')
     eval_options, eval_color = skill_model.sample_eval_options(num_random_trajectories, traj_length)
@@ -415,8 +423,10 @@ def eval_metrics(make_env_fn, agent, skill_model, num_random_trajectories, traj_
                                           example_env.env_discretizer(), 
                                           prefix = f'Object№{obj_idx}'))
     for obj_idx in range(n_objects):
+        extracted_objects = static_object_extractor.extract(option_trajectories[obj_idx]['observations'])
         rewards = skill_model.calculate_rewards(observations = option_trajectories[obj_idx]['observations'], 
                                                 next_observations = option_trajectories[obj_idx]['next_observations'],
+                                                static_objects = extracted_objects,
                                                 options = option_trajectories[obj_idx]['options'], 
                                                 obj_idxs = option_trajectories[obj_idx]['obj_idxs'])
         values = agent.inference_value(observations = option_trajectories[obj_idx]['observations'],

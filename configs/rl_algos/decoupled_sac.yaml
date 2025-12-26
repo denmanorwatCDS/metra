@@ -13,6 +13,15 @@ env:
   normalizer_type: "off"
   env_kwargs: null
 
+static_object_extractor:
+  lr: 1e-4
+  wd: 0.
+  device: ${globals.device}
+  type: 'classic'
+  net:
+    hidden_sizes: ${globals.mlp_arch}
+    hidden_nonlinearity: ReLU
+
 skill:
   name: 'METRA'
   lr: 1e-4
@@ -30,6 +39,7 @@ skill:
   slot_pooler:
     name: Fetcher
     kwargs: {}
+  
   trajectory_encoder:
     dim_option: ${skill.dim_option}
     net:
