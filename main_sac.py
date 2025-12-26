@@ -37,8 +37,6 @@ def fetch_config():
     args = parser.parse_args()
 
     config_folder = str(pathlib.Path(__file__).parent.resolve()) + '/configs'
-    print(config_folder)
-    print(args.default_config)
     rl_config_path = config_folder + '/rl_algos/' + args.default_config
     rl_config = omegaconf.OmegaConf.load(rl_config_path)
     algo_name = rl_config.rl_algo.name.lower()
