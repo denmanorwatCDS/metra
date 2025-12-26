@@ -43,11 +43,12 @@ def fetch_config():
 
     env_config_path = config_folder + '/' + args.env_config
     env_config = omegaconf.OmegaConf.load(env_config_path)
+    env_config_name = args.env_config.split('/')[-1][:-5]
     rl_config.merge_with(env_config)
     rl_config.globals.seed = int(args.seed)
     assert rl_config.globals.seed > 3, 'Seeds 0, 1, 2, 3 reserved for evaluation'
 
-    return rl_config
+    return rl_config, env_config_name
 
 def make_env(env_name, env_kwargs, max_path_length, seed, frame_stack, normalizer_type, 
              render_info = False):
@@ -128,10 +129,11 @@ def make_env(env_name, env_kwargs, max_path_length, seed, frame_stack, normalize
     return env
     
 def run():
-    config = fetch_config()
+    config, run_name = fetch_config()
 
     exp = comet_ml.start(project_name = 'metra')
     exp.log_parameters(config)
+    exp.set_name(run_name)
 
     print('ARGS: ' + str(config))
     if config.globals.n_thread is not None:
