@@ -357,7 +357,8 @@ def render_ori_trajectories(options, colors, n_slots, n_objects, eval_env_maker,
     plt.close(fig)
     return skill_img, random_trajectories
 
-def render_phi_plot(skill_model, random_trajectories, eval_color, sample_processor, device):
+def render_phi_plot(skill_model, static_object_extractor, 
+                    random_trajectories, eval_color, sample_processor, device):
     fig, axs = plt.subplots(1, len(random_trajectories))
     fig.set_size_inches(15, 15)
     if isinstance(axs, matplotlib.axes._axes.Axes):
@@ -368,7 +369,8 @@ def render_phi_plot(skill_model, random_trajectories, eval_color, sample_process
         last_obs = torch.stack([torch.from_numpy(ob[-1]).to(device) for ob in data['observations']]).float()
         last_obj_idx = torch.tensor([ob[-1].item() for ob in data['obj_idxs']]).to(device)
         
-        means, stds, samples = skill_model.fetch_encoder_representation(last_obs, last_obj_idx)
+        extracted_objects = static_object_extractor.extract(last_obs)
+        means, stds, samples = skill_model.fetch_encoder_representation(last_obs, extracted_objects, last_obj_idx)
         axs[i].set_title(f'Object №{i}')
         draw_2d_gaussians(means, stds, eval_color, axs[i])
         draw_2d_gaussians(samples, [[0.03, 0.03]] * len(samples), eval_color, axs[i], fill=True, 
@@ -399,8 +401,9 @@ def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
                                                              agent = agent)
     comet_logger.log_image(image_data = skill_img, name = "Skill trajs", step = step)
 
-    phi_img = render_phi_plot(skill_model = skill_model, random_trajectories = option_trajectories, 
-                             eval_color = eval_color, sample_processor = sample_processor, device = device)
+    phi_img = render_phi_plot(skill_model = skill_model, static_object_extractor = static_object_extractor, 
+                              random_trajectories = option_trajectories, 
+                              eval_color = eval_color, sample_processor = sample_processor, device = device)
     comet_logger.log_image(image_data = phi_img, name = "Phi plot", step = step)
 
     # Videos
