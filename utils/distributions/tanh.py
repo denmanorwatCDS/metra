@@ -18,10 +18,7 @@ class TanhNormal(torch.distributions.Distribution):
     """ # noqa: 501
 
     def __init__(self, loc, scale):
-        try:
-            self._normal = Independent(Normal(loc, scale), 1)
-        except ValueError:
-            print('Lol')
+        self._normal = Independent(Normal(loc, scale), 1)
         super().__init__(batch_shape=self._normal.batch_shape,
                          event_shape=self._normal.event_shape,
                          validate_args=False)

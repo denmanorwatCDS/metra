@@ -430,10 +430,9 @@ def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
                                           example_env.env_discretizer(), 
                                           prefix = f'Object№{obj_idx}'))
     for obj_idx in range(n_objects):
-        extracted_objects = static_object_extractor.extract(option_trajectories[obj_idx]['observations'])
         rewards = skill_model.calculate_rewards(observations = option_trajectories[obj_idx]['observations'], 
                                                 next_observations = option_trajectories[obj_idx]['next_observations'],
-                                                static_objects = extracted_objects,
+                                                static_object_extractor = static_object_extractor,
                                                 options = option_trajectories[obj_idx]['options'], 
                                                 obj_idxs = option_trajectories[obj_idx]['obj_idxs'])
         values = agent.inference_value(observations = option_trajectories[obj_idx]['observations'],
