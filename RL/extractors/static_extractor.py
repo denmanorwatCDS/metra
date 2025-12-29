@@ -16,12 +16,10 @@ class StaticObjectExtractor(nn.Module):
         next_features = self.enc(next_obs)
         batch_size, obj_qty, feat_dim = features.shape
         feat1, feat2 = torch.unsqueeze(features, dim = 1), torch.unsqueeze(next_features, dim = 2)
-        unnorm_cos_sim = torch.exp(torch.sum(feat1 * feat2, dim = -1) / self.temperature)
-        norm = torch.sqrt(torch.sum(feat1 ** 2, dim = -1)) * torch.sqrt(torch.sum(feat2 ** 2, dim = -1)) / self.temperature
-        normalizer = torch.exp(norm)
-        norm_cos_sim = unnorm_cos_sim / normalizer
-        draw_near = torch.diagonal(norm_cos_sim, dim1 = -2, dim2 = -1)
-        draw_apart = torch.sum(norm_cos_sim, dim=-1) - draw_near
+        norm_feat1, norm_feat2 = nn.functional.normalize(feat1, dim = -1), nn.functional.normalize(feat2, dim = -1)
+        cos_sim = torch.exp(torch.sum(norm_feat1 * norm_feat2, dim = -1) / self.temperature)
+        draw_near = torch.diagonal(cos_sim, dim1 = -2, dim2 = -1)
+        draw_apart = torch.sum(cos_sim, dim=-1) - draw_near
         contrastive_loss = torch.mean(torch.sum(-1 * torch.log(draw_near / (draw_apart + 1e-5)), dim = -1))
         return contrastive_loss, {'Similarity term': torch.mean(draw_near), 
                                   'Dissimilarity term': torch.mean(draw_apart)}
