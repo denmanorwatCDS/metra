@@ -124,6 +124,7 @@ class METRA(torch.nn.Module):
         next_observations = torch.from_numpy(next_observations.reshape((-1,) + next_observations.shape[2:])).to(self.device)
         obj_idxs = torch.from_numpy(obj_idxs.reshape(-1)).to(self.device)
         options = torch.from_numpy(options.reshape((-1,) + options.shape[2:])).to(self.device)
+        static_objects = torch.from_numpy(static_objects).to(self.device)
         with torch.no_grad():
             cur_obj_repr = self.fetch_single_vector_representation(observations, obj_idxs)
             next_obj_repr = self.fetch_single_vector_representation(next_observations, obj_idxs)
