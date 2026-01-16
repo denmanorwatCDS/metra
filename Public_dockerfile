@@ -1,0 +1,40 @@
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+ADD . ./metra
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential software-properties-common git curl libbz2-dev libffi-dev liblzma-dev \
+      libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev \
+      libxml2-dev libxmlsec1-dev llvm make tk-dev wget \
+      xz-utils zlib1g-dev nano rsync vim tree unzip htop tmux xvfb patchelf ca-certificates \
+      bash-completion libjpeg-dev libpng-dev \
+      ffmpeg cmake swig libssl-dev libcurl4-openssl-dev libopenmpi-dev python3-dev zlib1g-dev \
+      qtbase5-dev qtdeclarative5-dev libglib2.0-0 libglu1-mesa-dev libgl1-mesa-dev libvulkan1 \
+      libgl1 libglx-mesa0 libosmesa6 libosmesa6-dev libglew-dev mesa-utils libglew-dev libc-dev \ 
+      libgl1-mesa-glx libglfw3
+RUN add-apt-repository ppa:deadsnakes/ppa
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends python3.9 python3.9-venv python3.9-dev python3-pip
+
+RUN mkdir -p /root/.mujoco
+WORKDIR /root/.mujoco
+RUN wget https://mujoco.org/download/mujoco210-linux-x86_64.tar.gz
+RUN tar -xvzf mujoco210-linux-x86_64.tar.gz
+RUN rm mujoco210-linux-x86_64.tar.gz
+WORKDIR /metra
+
+SHELL ["/bin/bash", "-c"]
+ENV COMET_API_KEY=???
+# Keeps Python from generating .pyc files in the container
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Turns off buffering for easier container logging
+ENV PYTHONUNBUFFERED=1
+
+ENV PATH="$PATH:/root/.local/bin"
+ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/root/.mujoco/mujoco210/bin"
+ENV VIRTUAL_ENV=./.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python3.9 -m venv $VIRTUAL_ENV
+
+RUN (python3.9 -m pip install setuptools==66.0.0) && pip install -r requirements.txt
