@@ -1,13 +1,14 @@
 env:
-  name: "ant"
-  normalizer_type: "preset"
-  env_kwargs: null
+  name: "decoupled_shapes"
+  normalizer_type: 'shapes'
   max_path_length: ${trainer_args.max_path_length}
   frame_stack: null
+  env_kwargs:
+    num_objects_range: [1, 1]
 
 trainer_args:
   trans_optimization_epochs: 50
-  max_path_length: 200
+  max_path_length: 80
 
 replay_buffer:
   common:

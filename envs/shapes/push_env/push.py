@@ -11,7 +11,7 @@ from .utils import norm, l1_norm
 
 class PushEnv(BaseEnv):
     def __init__(self, seed, arena_size = 1.,
-                 render_mode = 'rgb_array', render_info = False, obs_size = 64, obs_channels = 3,
+                 render_mode = 'rgb_array', render_info = False, obs_size = 224, obs_channels = 3,
                  num_objects_range = [4, 4], moving_step_size = 0.05, 
                  wo_agent = False, max_steps = 100, agent_pos = [0.5, 0.5],
                  use_bg = False, distance_to_agent = 0.08, distance_to_objs = 0.08, distance_to_wall = 0.08):

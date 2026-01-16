@@ -5,13 +5,6 @@ globals:
   n_parallel: 8
   mlp_arch: [1024, 1024]
 
-env:
-  name: maze
-  max_path_length: 200
-  frame_stack: null
-  normalizer_type: "off"
-  env_kwargs: null
-
 skill:
   name: 'METRA'
   lr: 1e-4

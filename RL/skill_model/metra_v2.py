@@ -4,16 +4,16 @@ import numpy as np
 from matplotlib import cm
 from networks.poolers.poolers import get_pooler_network
 from networks.hypernetwork.hypernetwork import HyperNetwork, PairedNetwork, SingleNetwork
-from torch.optim import AdamW
+from torch.optim import Adam
 from eval_utils.eval_utils import get_option_colors
 
 class METRA(torch.nn.Module):
     def __init__(
             self,
             *,
-            obs_length,
+            obs_length, num_objs,
             pooler_config, traj_encoder_config,
-            lr, wd,
+            lr,
             dual_lam,
             option_size,
             discrete,
@@ -24,46 +24,38 @@ class METRA(torch.nn.Module):
         super().__init__()
         self.device = device
         self.preset_options = None
-        self.pooler = get_pooler_network(name = pooler_config.name, obs_length = obs_length, 
-                                         skill_length = option_size, pooler_config = pooler_config.kwargs).to(self.device)
+        self.pooler = get_pooler_network(name = pooler_config.name, obs_length = obs_length, obj_qty = num_objs,
+                                         skill_length = None, pooler_config = pooler_config.kwargs).to(self.device)
         
         self._init_trajectory_encoder(obs_dim = self.pooler.outp_dim, skill_dim = option_size, 
-                                      net_hidden_sizes = traj_encoder_config.net.hidden_sizes,
-                                      net_hidden_nonlinearity = traj_encoder_config.net.hidden_nonlinearity,
-                                      hypernet_param_dim = traj_encoder_config.hypernet.parameterizer_dim,
-                                      hypernet_hidden_sizes = traj_encoder_config.hypernet.hidden_sizes,
-                                      hypernet_hidden_act = traj_encoder_config.hypernet.hidden_nonlinearity,
-                                      hypernet_compressed_dim = traj_encoder_config.hypernet.compressed_dim,
-                                      hypernet_type = traj_encoder_config.hypernet.type)
+                                      encoder_config = traj_encoder_config)
         self.log_dual_lam = torch.nn.Parameter(data = torch.log(torch.Tensor([dual_lam])).to(device), 
                                                requires_grad = True)
-
         self.option_size = option_size
 
         self.discrete = discrete
         self.unit_length = unit_length
         self.dual_slack = dual_slack
-        self.optimizer = AdamW(params = self.parameters(), lr = lr, weight_decay = wd)
+        self.optimizer = Adam(params = self.parameters(), lr = lr)
 
-    def _init_trajectory_encoder(self, obs_dim, skill_dim, net_hidden_sizes, net_hidden_nonlinearity, 
-                                 hypernet_param_dim, hypernet_hidden_act, hypernet_hidden_sizes, hypernet_compressed_dim,
-                                 hypernet_type):
-        if hypernet_type == 'classic':
-            self._traj_encoder = HyperNetwork(parameterizer_dim = hypernet_param_dim, 
+    def _init_trajectory_encoder(self, obs_dim, skill_dim, encoder_config):
+        encoder_type = encoder_config.type
+        if encoder_type == 'hyper':
+            self._traj_encoder = HyperNetwork(parameterizer_dim = encoder_config.hypernet.parameterizer_dim, 
                                               net_in_dim = obs_dim, net_out_dim = skill_dim,
-                                              hypernet_arch = hypernet_hidden_sizes,
-                                              hypernet_act = hypernet_hidden_act,
-                                              compressed_dim = hypernet_compressed_dim,
-                                              net_arch = net_hidden_sizes, 
-                                              net_act = net_hidden_nonlinearity).to(self.device)
-        elif hypernet_type == 'gt':
+                                              hypernet_arch = encoder_config.hypernet.hidden_sizes,
+                                              hypernet_act = encoder_config.hypernet.hidden_nonlinearity,
+                                              compressed_dim = encoder_config.hypernet.compressed_dim,
+                                              net_arch = encoder_config.net.hidden_sizes, 
+                                              net_act = encoder_config.net.hidden_nonlinearity).to(self.device)
+        elif encoder_type == 'paired':
             self._traj_encoder = PairedNetwork(net_in_dim = obs_dim, net_out_dim = skill_dim, 
-                                                net_arch = net_hidden_sizes, 
-                                                net_act = net_hidden_nonlinearity).to(self.device)
-        elif hypernet_type == 'single':
+                                               net_arch = encoder_config.net.hidden_sizes, 
+                                               net_act = encoder_config.net.hidden_nonlinearity).to(self.device)
+        elif encoder_type == 'single':
             self._traj_encoder = SingleNetwork(net_in_dim = obs_dim, net_out_dim = skill_dim, 
-                                               net_arch = net_hidden_sizes, 
-                                               net_act = net_hidden_nonlinearity).to(self.device)
+                                               net_arch = encoder_config.net.hidden_sizes, 
+                                               net_act = encoder_config.net.hidden_nonlinearity).to(self.device)
         else:
             assert False, 'Unknown type of hypernetwork provided'
             
@@ -106,11 +98,11 @@ class METRA(torch.nn.Module):
         return logs, rewards
     
     def fetch_single_vector_representation(self, observations, obj_idxs):
-        return self.pooler(observations, obj_idxs)
+        return self.pooler(observations, skill = None, obj_idx = obj_idxs)
     
     def fetch_encoder_representation(self, observations, static_objects, obj_idxs):
         with torch.no_grad():
-            obj_repr = self.pooler(observations, obj_idxs)
+            obj_repr = self.pooler(observations, skill = None, obj_idx = obj_idxs)
             mean = self.call_traj_encoder(object_representation = obj_repr, static_objects = static_objects,
                                           obj_idxs = obj_idxs)
         mean = mean.cpu().numpy()

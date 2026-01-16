@@ -40,7 +40,7 @@ class GTShapesObjectExtractor(nn.Module):
         super().__init__()
 
     def optimize_oe(self, obs, next_obs):
-        pass
+        return {}
 
     def extract(self, obs):
         return obs[..., :-2]
@@ -50,17 +50,18 @@ class IdentityExtractor(nn.Module):
         super().__init__()
 
     def optimize_oe(self, obs, next_obs):
-        pass
+        return {}
 
     def extract(self, obs):
         return obs
     
-def get_object_extractor(type, lr, wd, in_dim, enc_arch, out_dim, enc_act, temp = 0.1):
+def get_object_extractor(config, in_dim, temp = 0.1):
+    type = config.type
     if type == 'classic':
-        return StaticObjectExtractor(lr = lr, wd = wd, in_dim = in_dim, enc_arch = enc_arch,
-                                     out_dim = out_dim, enc_act = enc_act, temp = temp)
+        return StaticObjectExtractor(lr = config.lr, wd = config.wd, in_dim = in_dim, enc_arch = config.net.hidden_sizes,
+                                     out_dim = config.out_dim, enc_act = config.net.hidden_nonlinearity, temp = temp)
     elif type == 'gt':
         return GTShapesObjectExtractor()
     
     elif type == 'Identity':
-        return IndentationError()
+        return IdentityExtractor()

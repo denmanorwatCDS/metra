@@ -77,8 +77,8 @@ class Actor(torch.nn.Module):
         return dist
     
     def get_mode(self, inp):
-        mean, _ = self.calculate_mean_std(inp)
-        return mean
+        dist = self.get_dist(inp)
+        return dist.mean
 
     def forward(self, single_features):
         dist = self.get_dist(single_features)

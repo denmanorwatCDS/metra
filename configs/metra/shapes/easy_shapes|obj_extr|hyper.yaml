@@ -1,17 +1,50 @@
 env:
   name: "decoupled_shapes"
   normalizer_type: 'shapes'
+  max_path_length: ${trainer_args.max_path_length}
+  frame_stack: null
   env_kwargs:
     num_objects_range: [1, 1]
 
 trainer_args:
   trans_optimization_epochs: 50
+  max_path_length: 80
 
 replay_buffer:
   common:
     max_transitions: 1000000
 
+rl_algo:
+  slot_pooler:
+    name: Transformer
+    kwargs: 
+      num_layers: 1
+      nhead: 4
+      dim_feedforward: 192
+
+static_object_extractor:
+  lr: 1e-4
+  wd: 0.
+  device: ${globals.device}
+  type: 'classic'
+  out_dim: ${skill.trajectory_encoder.hypernet.parameterizer_dim}
+  net:
+    hidden_sizes: ${globals.mlp_arch}
+    hidden_nonlinearity: ReLU
+
 skill:
-  name: "metra"
-  discrete: false
-  dim_option: 2
+  slot_pooler:
+    name: Fetcher
+    kwargs: {}
+  trajectory_encoder:
+    type: hyper
+    dim_option: ${skill.dim_option}
+    net:
+      hidden_sizes: ${globals.mlp_arch}
+      hidden_nonlinearity: ReLU
+    hypernet:
+      hidden_sizes: ${globals.mlp_arch}
+      hidden_nonlinearity: ReLU
+      compressed_dim: 64
+      parameterizer_dim: 12
+      type: classic

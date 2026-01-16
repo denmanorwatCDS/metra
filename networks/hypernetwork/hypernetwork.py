@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from torch.nn import functional
 from networks.utils.mlp_builder import mlp_builder
 
 class HyperNetwork(nn.Module):

@@ -3,28 +3,11 @@ globals:
   sample_cpu: true
   n_thread: 1
   n_parallel: 8
-  mlp_arch: [512, 512]
-
-env:
-  name: maze
-  max_path_length: 200
-  frame_stack: null
-  normalizer_type: "off"
-  env_kwargs: null
-
-static_object_extractor:
-  lr: 1e-4
-  wd: 0.
-  device: ${globals.device}
-  type: 'classic'
-  net:
-    hidden_sizes: ${globals.mlp_arch}
-    hidden_nonlinearity: ReLU
+  mlp_arch: [1024, 1024]
 
 skill:
-  name: 'METRA'
+  name: 'metra'
   lr: 1e-4
-  wd: 0.
   dim_option: 2
   discrete: false
   unit_length: true
@@ -38,35 +21,14 @@ skill:
   slot_pooler:
     name: Fetcher
     kwargs: {}
-  
-  trajectory_encoder:
-    dim_option: ${skill.dim_option}
-    net:
-      hidden_sizes: ${globals.mlp_arch}
-      hidden_nonlinearity: ReLU
-    hypernet:
-      hidden_sizes: ${globals.mlp_arch}
-      hidden_nonlinearity: ReLU
-      compressed_dim: 64
-      parameterizer_dim: 12
-      type: classic
 
 rl_algo:
   name: 'SAC'
   lr: 1e-4
   wd: 0.
   tau: 5e-3
-  scale_reward: 1.
-  target_coef: 1.
-  discount: 0.99
-  gae_lambda: null
+  discount: 1-1/${trainer_args.max_path_length}
   device: ${globals.device}
-  slot_pooler:
-    name: Transformer
-    kwargs: 
-      num_layers: 1
-      nhead: 4
-      dim_feedforward: 192
   policy:
     name: 'option_policy'
     dim_option: ${skill.dim_option}
@@ -82,15 +44,10 @@ rl_algo:
     value: 1e-2
 
 replay_buffer:
-  gae_lambda: ${rl_algo.gae_lambda}
-  discount: ${rl_algo.discount}
   common:
     min_transitions: 10000
     max_transitions: 300000
     batch_size: 256
-    discount: ${rl_algo.discount}
-  skill: null
-  policy: null
 
 trainer_args:
   n_parallel: 4

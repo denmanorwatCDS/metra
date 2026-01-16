@@ -3,13 +3,19 @@ from torch import nn
 from math import sqrt
 
 class FetcherPooler(nn.Module):
-    def __init__(self, obs_length):
+    def __init__(self, obs_length, skill_length = None):
         super().__init__()
+        self.expect_skill = False
         self.outp_dim = obs_length
+        if skill_length is not None:
+            self.expect_skill = True
+            self.outp_dim += skill_length
 
-    def forward(self, seq, obj_idx):
+    def forward(self, seq, skill = None, obj_idx = None):
         # Expecting seq to be of shape [Batch, Seq_len, obs_dim]
         outp = seq[torch.arange(0, seq.shape[0], 1), obj_idx]
+        if self.expect_skill:
+            outp = torch.cat([outp, skill], dim = -1)
         return outp
     
 class TransformerPooler(nn.Module):
@@ -29,7 +35,7 @@ class TransformerPooler(nn.Module):
         self.dim_feedforward = dim_feedforward
         self.outp_dim = dim_feedforward + skill_length
         
-    def forward(self, seq, skill, obj_idx):
+    def forward(self, seq, skill = None, obj_idx = None):
         # Expecting seq to be of shape [Batch, Seq_len, obs_dim]
         batch_len, seq_len, obs_dim = seq.shape
         # Add readout token
@@ -46,27 +52,21 @@ class TransformerPooler(nn.Module):
         attention = torch.softmax(torch.sum(query * keys, axis=-1, keepdim=True)/sqrt(self.dim_feedforward), dim = -2)
         output = torch.sum(attention * values, axis=-2)
         return torch.cat([output, skill], dim=-1)
-
-class IdentityPooler(nn.Module):
-    def __init__(self, obs_length, skill_length):
-        super().__init__()
-        self.outp_dim = obs_length
-
-    def forward(self, seq, skill, obj_idx = None):
-        # Expecting seq to be of shape [Batch, Seq_len, obs_dim]
-        return seq[:, 0]
     
 class ConcatPooler(nn.Module):
-    def __init__(self, obs_length, skill_length, obj_qty):
+    def __init__(self, obs_length, obj_qty, skill_length = None):
         super().__init__()
-        self.outp_dim = obs_length * obj_qty + skill_length
-        self.obj_embed = nn.Parameter(torch.randn(obs_length) * 0.02)
+        self.expect_skill = False
+        self.outp_dim = obs_length * obj_qty
+        if skill_length is not None:
+            self.outp_dim += skill_length
+            self.expect_skill = True
 
-    def forward(self, seq, skill, obj_idx):
+    def forward(self, seq, skill = None, obj_idx = None):
         batch_len, seq_len, obs_dim = seq.shape
-        seq[torch.arange(0, batch_len), obj_idx] += self.obj_embed
-        state_desc = torch.cat([seq[:, i] for i in range(seq_len)], axis=-1)
-        embed = torch.cat([state_desc, skill], axis = -1)
+        embed = torch.cat([seq[:, i] for i in range(seq_len)], axis = -1)
+        if skill is not None:
+            embed = torch.cat([embed, skill], axis = -1)
         return embed
     
 def get_pooler_network(name, obs_length, skill_length, pooler_config, obj_qty = None):
@@ -74,7 +74,5 @@ def get_pooler_network(name, obs_length, skill_length, pooler_config, obj_qty = 
         return TransformerPooler(obs_length = obs_length, skill_length = skill_length, **pooler_config)
     elif name == 'Fetcher':
         return FetcherPooler(obs_length = obs_length)
-    elif name == 'Identity':
-        return IdentityPooler(obs_length = obs_length, skill_length = skill_length)
     elif name == 'Concat':
         return ConcatPooler(obs_length = obs_length, skill_length = skill_length, obj_qty = obj_qty)

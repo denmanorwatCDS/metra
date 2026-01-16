@@ -1,5 +1,4 @@
 import torch
-from networks.utils.mlp import MultiHeadedMLPModule
 from torch import nn
 from networks.utils.mlp_builder import mlp_builder
 
