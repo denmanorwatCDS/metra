@@ -70,15 +70,14 @@ def monte_carlo_value_difference(rewards, gamma):
 
 def calculate_validation_rewards(trajectories, static_object_extractor, skill_model):
     tr = copy.deepcopy(trajectories)
-    repackaged_tr = {}
-    for key in tr[0].keys():
-        repackaged_tr[key] = np.concatenate([tr[i][key] for i in range(len(tr))], axis = 0)
-    rewards = skill_model.calculate_rewards(observations = repackaged_tr['observations'],
-                                            next_observations = repackaged_tr['next_observations'],
+    rewards = []
+    for i in range(len(tr)):
+        rewards.append(skill_model.calculate_rewards(observations = tr[i]['observations'],
+                                            next_observations = tr[i]['next_observations'],
                                             static_object_extractor = static_object_extractor,
-                                            options = repackaged_tr['options'],
-                                            obj_idxs = repackaged_tr['obj_idxs'])
-    return np.mean(rewards)
+                                            options = tr[i]['options'],
+                                            obj_idxs = tr[i]['obj_idxs']))
+    return np.mean(np.concatenate(rewards, axis = 0))
 
 class StatisticsCalculator():
     def __init__(self, name):
