@@ -367,7 +367,6 @@ def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
     comet_logger.log_metrics({'Val/gathered_reward': calculate_validation_rewards(trajectories = option_trajectories,
                                                                                   static_object_extractor = static_object_extractor,
                                                                                   skill_model = skill_model)})
-
     # Videos
     videos = []
     video_options = skill_model.sample_fixated_options(traj_length)

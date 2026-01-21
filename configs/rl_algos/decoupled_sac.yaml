@@ -27,7 +27,7 @@ rl_algo:
   lr: 1e-4
   wd: 0.
   tau: 5e-3
-  discount: 1-1/${trainer_args.max_path_length}
+  discount: 0.99
   device: ${globals.device}
   policy:
     name: 'option_policy'
