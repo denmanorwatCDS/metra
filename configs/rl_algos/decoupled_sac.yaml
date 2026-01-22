@@ -27,7 +27,7 @@ rl_algo:
   lr: 1e-4
   wd: 0.
   tau: 5e-3
-  discount: 0.99
+  discount: '0.99'
   device: ${globals.device}
   policy:
     name: 'option_policy'
@@ -45,7 +45,7 @@ rl_algo:
 
 replay_buffer:
   common:
-    min_transitions: 40000
+    min_transitions: 10000
     max_transitions: 300000
     batch_size: 256
 

@@ -36,7 +36,7 @@ rl_algo:
   tau: 5e-3
   scale_reward: 1.
   target_coef: 1.
-  discount: 0.99
+  discount: '0.99'
   gae_lambda: null
   device: ${globals.device}
   slot_pooler:
