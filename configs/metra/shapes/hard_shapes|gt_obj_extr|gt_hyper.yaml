@@ -7,8 +7,8 @@ env:
     num_objects_range: [4, 4]
 
 trainer_args:
-  trans_optimization_epochs: 120
-  max_path_length: 60
+  trans_optimization_epochs: 50
+  max_path_length: 20
 
 replay_buffer:
   common:
