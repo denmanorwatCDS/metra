@@ -8,7 +8,7 @@ env:
 
 trainer_args:
   trans_optimization_epochs: 50
-  max_path_length: 20
+  max_path_length: 25
 
 replay_buffer:
   common:
