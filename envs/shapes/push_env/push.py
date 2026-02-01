@@ -52,6 +52,7 @@ class PushEnv(BaseEnv):
         return True
 
     def _move_objs(self, delta, eps=1e-6):
+        touched_wall = False
         self._objs[-1, 3] += delta[0]
         self._objs[-1, 4] += delta[1]
         moves = [delta]
@@ -86,40 +87,41 @@ class PushEnv(BaseEnv):
                     self._objs[i, 3: 5] -= obj_movement
                     moves.append(np.array([0, 0]))
                     break
+                if np.any(self._objs[i, 3: 5] < obj_size / 2) or np.any(self._objs[i, 3: 5] > 1 - obj_size / 2):
+                    touched_wall = True
                 self._objs[i, 3: 5] = np.clip(self._objs[i, 3: 5], obj_size / 2, 1 - obj_size / 2)
                 moves.append(self._objs[i, 3: 5] - before_pos)
         moves = np.array(moves)
         smallest_move_idxs = np.argmin(np.abs(moves), axis = 0)
         smallest_move = np.array([moves[smallest_move_idxs[0], 0], moves[smallest_move_idxs[1], 1]])
         self._objs[-1, 3: 5] = self._objs[-1, 3: 5] - delta + smallest_move
+        return touched_wall
 
     def step(self, act):
         """
         act: {0,1,2,3} <- up, left, down, right
         """
-        truncated = False
         # move
         assert np.all(act <= 1.) and np.all(act >= -1), 'Out-of-bounds action is supplied'
-        prev_coords = deepcopy(self._objs[:, 3: 5])
-        self._move_objs(act * self._moving_step_size)
+        before_coordinates = deepcopy(self._objs[:, 3: 5])
+        wall_touch = self._move_objs(act * self._moving_step_size)
         self._objs[-1, 3: 5] = np.clip(
             self._objs[-1, 3: 5], self._AGENT[2] / 2, 1 - self._AGENT[2] / 2
         )
-        next_coords = deepcopy(self._objs[:, 3: 5])
-        self.step_count += 1
-        if self.step_count >= self._max_steps:
-            truncated = True
+        after_coordinates = deepcopy(self._objs[:, 3: 5])
         # dense reward type
         obs = self.render()
         return (
             obs,
             0.,
-            False,
-            self._prepare_info(obs, truncated, prev_coordinares = prev_coords, next_coordinates = next_coords)
+            wall_touch,
+            self._prepare_info(obs, before_coordinates = before_coordinates,
+                                    after_coordinates = after_coordinates)
         )
     
-    def _prepare_info(self, obs, truncated, prev_coordinares, next_coordinates):
-        info = super()._prepare_info(obs, truncated, prev_coordinares, next_coordinates)
+    def _prepare_info(self, obs, before_coordinates, after_coordinates):
+        info = super()._prepare_info(obs, before_coordinates = before_coordinates,
+                                          after_coordinates = after_coordinates)
         info['objects'] = deepcopy(self._objs[:-1])
         info['agent'] = deepcopy(self._objs[-1])
         return info

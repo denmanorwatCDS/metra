@@ -46,6 +46,7 @@ class BaseEnv:
         self.render_info = render_info
         self.seed_ = seed
         self.np_rng = np.random.default_rng(seed)
+        self.spec = None
 
         self.action_space = spaces.Box(low = -np.array([1, 1]),
                                        high = np.array([1, 1]))
@@ -70,7 +71,6 @@ class BaseEnv:
             )
 
         self._objs = None
-        self.step_count = 0
 
     def prepare_states(self, preset_shapes):
         # 3 - is color vector size, 
@@ -199,8 +199,8 @@ class BaseEnv:
 
     def reset(self):
         self._objs = self._set_objs()
-        self.step_count = 0
-        return self.render()
+        obs = self.render()
+        return obs
 
     def step(self, act):
         """
@@ -219,18 +219,14 @@ class BaseEnv:
             self._objs[-1, 4], self._AGENT[2] / 2, 1 - self._AGENT[2] / 2
         )
         next_pos = deepcopy(self._objs[:, 3: 5])
-        self.step_count += 1
-        if self.step_count >= self._max_steps:
-            truncated = True
         obs = self.render()
-        return obs, 0, self._prepare_info(self, obs, truncated, prev_coordinares = prev_pos,
-                                                    next_coordinates = next_pos), False
+        return obs, 0, self._prepare_info(obs, before_coordinates = prev_pos,
+                                               after_coordinates = next_pos), False
     
-    def _prepare_info(self, obs, truncated, prev_coordinares, next_coordinates):
+    def _prepare_info(self, obs, before_coordinates, after_coordinates):
         info = dict(
-            truncated = truncated,
-            coordinates = prev_coordinares.astype(np.float32),
-            next_coordinates = next_coordinates.astype(np.float32)
+            before_coordinates = before_coordinates.astype(np.float32),
+            after_coordinates = after_coordinates.astype(np.float32)
         )
         if self.render_info:
             if self.render_mode in ['state', 'simple_state']:
@@ -272,7 +268,6 @@ class BaseEnv:
 
     def close(self):
         self._objs = None
-        self.step_count = 0
 
     @property
     def n_obj(self):

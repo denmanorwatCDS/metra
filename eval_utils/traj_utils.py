@@ -2,16 +2,16 @@ import numpy as np
 from matplotlib.patches import Ellipse
 
 def render_trajectories(coordinates, colors, plot_axis, ax):
-    assert coordinates.ndim == 3, '''It is expected that coordinates are of size 
-                                     [trajectories_qty x trajectory_length x coordinates_qty]'''
-    assert coordinates.shape[2] == 2, 'It is expected that only two coordinates are tracked'
-
-    min_ax, max_ax = np.min(coordinates[..., :2]), np.max(coordinates[..., :2])
-    offset = (max_ax - min_ax) * 0.1
-    square_axis_limits = np.array([min_ax - offset, max_ax + offset])
+    min_ax, max_ax = None, None
     for trajectory, color in zip(coordinates, colors):
         trajectory = np.array(trajectory)
-        ax.plot(trajectory[:, 0], trajectory[:, 1], color=color, linewidth=0.7)
+        ax.plot(trajectory[:, 0], trajectory[:, 1], color = np.array(color[0]), linewidth=0.7)
+        if min_ax is None and max_ax is None:
+            min_ax, max_ax = np.min(trajectory), np.max(trajectory)
+        else:
+            min_ax, max_ax = min(min_ax, np.min(trajectory)), max(max_ax, np.max(trajectory))
+    offset = (max_ax - min_ax) * 0.1
+    square_axis_limits = np.array([min_ax - offset, max_ax + offset])
     if plot_axis == 'free':
         return
     if plot_axis is None:
@@ -58,7 +58,8 @@ def draw_2d_gaussians(means, stddevs, colors, ax, fill=False, alpha=0.8, use_ada
 
 def calc_eval_metrics(coordinates, discretize_continuous_fn, prefix = None):
     eval_metrics = {}
-    uniq_coords = np.unique(discretize_continuous_fn(coordinates).reshape(-1, coordinates.shape[-1]).astype(np.int32), axis=0)
+    coordinate_seq = np.concatenate(coordinates, axis = 0)
+    uniq_coords = np.unique(discretize_continuous_fn(coordinate_seq).reshape(-1, coordinate_seq.shape[-1]).astype(np.int32), axis=0)
     key = 'NumUniqueCoords'
     if prefix is not None:
         key = f'{prefix}_{key}'

@@ -5,12 +5,11 @@ env:
   name: "dmc_quadruped"
   normalizer_type: "squashed"
   frame_stack: 3
+  max_path_length: 200
   env_kwargs: null
 
 trainer_args:
-  trans_optimization_epochs: 225
-  skill_optimization_epochs: 150
-  policy_optimization_mult: 4
+  trans_optimization_epochs: 200
 
 replay_buffer:
   skill:

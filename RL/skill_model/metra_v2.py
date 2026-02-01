@@ -24,6 +24,7 @@ class METRA(torch.nn.Module):
         super().__init__()
         self.device = device
         self.preset_options = None
+        self.num_objs = num_objs
         self.pooler = get_pooler_network(name = pooler_config.name, obs_length = obs_length, obj_qty = num_objs,
                                          skill_length = None, pooler_config = pooler_config.kwargs).to(self.device)
         
@@ -63,19 +64,16 @@ class METRA(torch.nn.Module):
         batch_size = object_representation.shape[0]
         return self._traj_encoder(object_representation, static_objects[torch.arange(batch_size), obj_idxs])
 
-    def sample_options_and_obj_idxs(self, batch_size, traj_len, skills_per_traj, n_objects):
-        assert traj_len % skills_per_traj == 0, 'Maximal length of trajectory must be divisible by skills per trajectory'
+    def sample_option_and_obj_idx(self):
         if self.discrete:
-            options = np.eye(self.option_size)[np.random.randint(0, self.option_size, size = (batch_size, skills_per_traj))]
+            option = np.eye(self.option_size)[np.random.randint(0, self.option_size, size = 1)]
         else:
-            options = np.random.randn(batch_size, skills_per_traj, self.option_size).astype(np.float32)
+            option = np.random.randn(self.option_size).astype(np.float32)
             if self.unit_length:
-                options /= np.linalg.norm(options, axis = -1, keepdims = True)
-        options = np.repeat(options, traj_len // skills_per_traj, axis = 1)
-        obj_idxs = np.random.randint(low = 0, high = n_objects, size = (batch_size, 1))
-        obj_idxs = np.repeat(obj_idxs, traj_len, axis = 1)
+                option /= np.linalg.norm(option, axis = -1, keepdims = True)
+        obj_idxs = np.random.randint(low = 0, high = self.num_objs)
 
-        return options, obj_idxs
+        return option, obj_idxs
     
     def train_components(self, observations, next_observations, static_objects, 
                          options, obj_idxs):
@@ -180,14 +178,12 @@ class METRA(torch.nn.Module):
         })
         return logs, loss_dual_lam
 
-    def sample_eval_options(self, num_random_trajectories, traj_length):
+    def sample_eval_options(self, num_random_trajectories):
         random_options, option_colors = None, None
         if self.discrete:
             random_options, option_colors = self._sample_discrete_options(num_random_trajectories)
         else:
             random_options, option_colors = self._sample_continuous_options(num_random_trajectories)
-        random_options = np.expand_dims(random_options, axis = 1)
-        random_options = np.repeat(random_options, traj_length, axis = 1)
         return random_options, option_colors
 
     def _sample_discrete_options(self, num_random_trajectories):
@@ -216,7 +212,7 @@ class METRA(torch.nn.Module):
         random_option_colors = get_option_colors(random_options * 4)
         return random_options, random_option_colors
     
-    def sample_fixated_options(self, traj_length):
+    def sample_fixated_options(self):
         if self.preset_options is None:
             video_options = None
             if self.discrete:
@@ -237,7 +233,5 @@ class METRA(torch.nn.Module):
                     if self.unit_length:
                         video_options = video_options / np.linalg.norm(video_options, axis=1, keepdims=True)
                 video_options = video_options.repeat(2, axis=0).astype(np.float32)
-            video_options = np.expand_dims(video_options, axis = 1)
-            video_options = np.repeat(video_options, traj_length, axis = 1)
             self.preset_options = video_options
         return copy.deepcopy(self.preset_options)

@@ -1,23 +1,25 @@
-import argparse, functools, sys
+import argparse, functools
 import comet_ml
 import numpy as np
 import omegaconf
 import pathlib
 import torch
-import math
 
+from ReplayBuffers.path_replay_buffer import StateSequence
 from envs.utils.consistent_normalized_env import consistent_normalize, get_normalizer_preset
 from envs.mujoco.obs_wrapper import ExpanderWrapper
-from ReplayBuffers.path_replay_buffer import PathBuffer
+from ReplayBuffers.path_replay_buffer import CyclicBuffer
 from RL.skill_model.metra_v2 import METRA
 from networks.extractors.static_extractor import get_object_extractor
 from RL.policies.sac import SAC
-from gym.vector import AsyncVectorEnv, SyncVectorEnv
+from gym.vector import AsyncVectorEnv
 from eval_utils.traj_utils import draw_2d_gaussians, render_trajectories, calc_eval_metrics
 from eval_utils.eval_utils import StatisticsCalculator, monte_carlo_value_difference, calculate_validation_rewards
 from eval_utils.video_utils import record_video
-import matplotlib.pyplot as plt
+from gym.wrappers import TimeLimit
+from copy import deepcopy
 import matplotlib
+import matplotlib.pyplot as plt
 
 def set_seed(seed):
     import random
@@ -49,16 +51,9 @@ def fetch_config():
 
     return rl_config, env_config_name
 
-def make_env(env_name, env_kwargs, max_path_length, seed, frame_stack, normalizer_type, 
+def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack, normalizer_type, 
              render_info = False):
-    if env_name == 'maze':
-        from envs.maze_env import MazeEnv
-        env = MazeEnv(
-            max_path_length=max_path_length,
-            action_range=0.2,
-        )
-        env = ExpanderWrapper(env)
-    elif env_name == 'half_cheetah':
+    if env_name == 'half_cheetah':
         from envs.mujoco.half_cheetah_env import HalfCheetahEnv
         env = HalfCheetahEnv(render_hw = 100)
         env.seed(seed = seed)
@@ -85,36 +80,33 @@ def make_env(env_name, env_kwargs, max_path_length, seed, frame_stack, normalize
                                            render_info = render_info)
     elif env_name == 'decoupled_shapes':
         from envs.shapes.push_env.push import PushEnv
-        env = PushEnv(seed = seed, arena_size = 3, render_mode = 'state', 
+        env = PushEnv(seed = seed, arena_size = env_kwargs.arena_size, render_mode = 'state', 
                       render_info = render_info, num_objects_range = env_kwargs.num_objects_range)
     elif env_name.startswith('dmc'):
         from envs.custom_dmc_tasks import dmc
         from envs.custom_dmc_tasks.pixel_wrappers import RenderWrapper
-        if env_name == 'dmc_cheetah':
-            env = dmc.make('cheetah_run_forward_color', obs_type='states', frame_stack=1, action_repeat=2, seed=seed)
-            env = RenderWrapper(env)
-        elif env_name == 'dmc_quadruped':
+        if env_name == 'dmc_quadruped':
             env = dmc.make('quadruped_run_forward_color', obs_type='states', frame_stack=1, action_repeat=2, seed=seed)
-            env = RenderWrapper(env)
-        elif env_name == 'dmc_humanoid':
-            env = dmc.make('humanoid_run_color', obs_type='states', frame_stack=1, action_repeat=2, seed=seed)
             env = RenderWrapper(env)
         else:
             raise NotImplementedError
-    elif env_name == 'kitchen':
-        sys.path.append('lexa')
-        from envs.lexa.mykitchen import MyKitchenEnv
-        assert seed is None, 'For some strange reason, this environment does not have any seed...'
-        env = MyKitchenEnv(log_per_goal=True)
+    # elif env_name == 'kitchen':
+    #    sys.path.append('lexa')
+    #    from envs.lexa.mykitchen import MyKitchenEnv
+    #    assert seed is None, 'For some strange reason, this environment does not have any seed...'
+    #    env = MyKitchenEnv(log_per_goal=True)
     else:
         raise NotImplementedError
 
     if frame_stack is not None:
         from envs.custom_dmc_tasks.pixel_wrappers import FrameStackWrapper
         env = FrameStackWrapper(env, frame_stack)
+    env = TimeLimit(env, max_episode_steps = max_path_length)
 
     normalizer_kwargs = {}
 
+    # TODO Implement readeble normalizer_type, meaning it is different for images and states 
+    # and different state environments
     if normalizer_type == 'off':
         env = consistent_normalize(env, flatten_obs = False, normalize_obs = False, **normalizer_kwargs)
     elif normalizer_type == 'squashed':
@@ -141,8 +133,8 @@ def run():
     set_seed(config.globals.seed)
     # TODO check that seeding is correct, meaning that observations must be uncorrelated!
     make_seeded_env = functools.partial(make_env, env_name = config.env.name, 
-                                        env_kwargs = config.env.env_kwargs,
                                         max_path_length = config.env.max_path_length,
+                                        env_kwargs = config.env.env_kwargs,
                                         frame_stack = config.env.frame_stack, 
                                         normalizer_type = config.env.normalizer_type)
     env = make_seeded_env(seed = config.globals.seed, render_info = False)
@@ -155,9 +147,14 @@ def run():
                   env_spec = env, device = config.globals.device,
                   discount = config.rl_algo.discount, lr = config.rl_algo.lr)
 
-    replay_buffer = PathBuffer(capacity_in_transitions = int(config.replay_buffer.common.max_transitions), 
-                               batch_size = config.replay_buffer.common.batch_size, pixel_keys = {}, 
-                               seed = config.globals.seed)
+    replay_buffer = CyclicBuffer(total_transitions = config.replay_buffer.common.max_transitions, 
+                                 env_qty = config.trainer_args.n_parallel, seed = config.globals.seed,
+                                 device = config.globals.device, 
+                                 observation_shape = env.observation_space.shape, 
+                                 observation_dtype = env.observation_space.dtype,
+                                 action_shape = env.action_space.shape, 
+                                 action_dtype = env.action_space.dtype,
+                                 option_shape = config.skill.dim_option, option_dtype = np.float32,)
 
     metra = METRA(obs_length = env.observation_space.shape[1], num_objs = env.n_obj, 
                   pooler_config = config.skill.slot_pooler, 
@@ -175,80 +172,122 @@ def run():
     train_cycle(config.trainer_args, agent = rl_algo, skill_model = metra, static_object_extractor = static_object_extractor, 
                 replay_buffer = replay_buffer, make_env_fn = make_seeded_env, seed = config.globals.seed, comet_logger = exp)
 
-def collect_train_trajectories(env, agent, skill_model, 
-                               trajectories_length, skills_per_traj = None, n_objects = None, trajectories_qty = None):
-    options, obj_idxs = skill_model.sample_options_and_obj_idxs(batch_size = trajectories_qty, 
-                                                                traj_len = trajectories_length,
-                                                                skills_per_traj = skills_per_traj, 
-                                                                n_objects = n_objects)
-    return collect_trajectories(env, agent, mode = 'train', options = options, obj_idxs = obj_idxs)
-
-def collect_eval_trajectories(env, agent, options, obj_idxs):
-    return collect_trajectories(env, agent, mode = 'eval', 
-                                options = options, obj_idxs = obj_idxs)
-
-def collect_trajectories(env, agent, mode, options = None, obj_idxs = None):
-    trajectories_qty, trajectories_length = options.shape[:2]
+def continue_random_trajectories_generation(vec_env, agent, skill_model, total_steps,
+                                            obs = None, terminated = None, truncated = None, 
+                                            options = None, obj_idxs = None):
+    steps, env_qty = 0, len(vec_env.env_fns)
+    state_seq = StateSequence(num_parallel_envs = env_qty)
+    assert (obs is None) == (terminated is None) == (truncated is None) == (options is None) == (obj_idxs is None),\
+    'When passing previous state, all elements must either be supplied or not supplied'
     
-    env_qty = len(env.env_fns)
-    if isinstance(env, (AsyncVectorEnv, SyncVectorEnv)):
-        pseudoepisodes = math.ceil(trajectories_qty / len(env.env_fns))
-    else:
-        pseudoepisodes = trajectories_qty
+    if terminated is None:
+        options, obj_idxs = [], []
+        obs = vec_env.reset()
+        terminated, truncated = np.full((env_qty,), fill_value = False), np.full((env_qty,), fill_value = False)
+        for i in range(env_qty):
+            option, obj_idx = skill_model.sample_option_and_obj_idx()
+            options.append(option), obj_idxs.append(obj_idx)
+        options, obj_idxs = np.array(options), np.array(obj_idxs)
     
-    cache = []
-    for pseudoepisode in range(pseudoepisodes):
-        prev_obs, prev_dones = env.reset(), np.full((env_qty,), fill_value = False)
-        for i in range(trajectories_length):
-            b_opt = options[pseudoepisode * env_qty: (pseudoepisode + 1) * env_qty, i]
-            b_obj_idxs = obj_idxs[pseudoepisode * env_qty: (pseudoepisode + 1) * env_qty, i]
-            action, action_info = agent.get_actions(prev_obs, b_opt, b_obj_idxs)
-            next_obs, rewards, dones, env_infos = env.step(action)
-            next_obs = np.transpose(next_obs, [0, 3, 1, 2]) if len(next_obs.shape) == 4 else next_obs
-            data = {'observations': prev_obs, 'next_observations': next_obs, 'rewards': rewards, 
-                    'dones': dones, 'actions': action, 'options': b_opt, 'obj_idxs': b_obj_idxs}
-            if mode == 'train':
-                data.update(**action_info)
-            elif mode == 'eval':
-                env_infos = {key: np.stack([env_infos[i][key] for i in range(len(env_infos))], axis=0) for key in env_infos[0].keys()}
-                data.update(**env_infos)
+    while steps < total_steps:
+        action, action_info = agent.get_actions(obs, options, obj_idxs)
+        outp_obs, rewards, dones, env_infos = vec_env.step(action)
+        truncated = np.array([env_infos[i].get('TimeLimit.truncated', False) for i in range(env_qty)])
+        terminated = np.logical_and(dones, np.logical_not(truncated))
 
-            if pseudoepisode == 0:
-                cache.append(data)
-            else:
-                cache[i] = {key: np.concatenate([cache[i][key], data[key]], axis = 0) for key in cache[i].keys()}
-            prev_obs = next_obs
-            prev_dones = np.logical_or(prev_dones, dones)
-    
-    tensors_by_key = {}
-    for key in cache[-1].keys():
-        tensors_by_key[key] = np.stack([cache[i][key] for i in range(len(cache))], axis = 1)
+        next_obs = deepcopy(outp_obs)
+        for i, done in enumerate(dones):
+            if done:
+                next_obs[i] = env_infos[i]['terminal_observation']
 
-    return tensors_by_key
+        state_seq.update(states = obs, next_states = next_obs, actions = action, 
+                         options = options, obj_idxs = obj_idxs, 
+                         terminated = terminated, truncated = truncated)
+        
+        if np.any(dones):
+            new_options, new_obj_idxs = [], []
+            for i in range(np.sum(dones)):
+                new_option, new_obj_idx = skill_model.sample_option_and_obj_idx()
+                new_options.append(new_option), new_obj_idxs.append(new_obj_idx)
+            new_options, new_obj_idxs = np.array(new_options), np.array(new_obj_idxs)
+            options[dones], obj_idxs[dones] = new_options, new_obj_idxs
+        obs = outp_obs
+        steps += env_qty
 
-def prepare_batch(batch, device = 'cuda'):
-    data = {}
-    for key, value in batch.items():
-        data[key] = torch.from_numpy(value).to(device)
-    return data
+    state_seq.finalize_trajectory_data()
+    return state_seq, obs, terminated, truncated, options, obj_idxs
+
+
+def collect_specific_trajectories(vec_env, agent, options, obj_idxs, colors = None):
+    steps, env_qty = 0, len(vec_env.env_fns)
+    idx_to_episode = np.arange(env_qty)
+    total_quantity_of_trajectories = options.shape[0]
+    if colors is None:
+        colors = np.zeros(total_quantity_of_trajectories)
+
+    cur_options, cur_obj_idxs, cur_colors = options[:env_qty], obj_idxs[:env_qty], colors[:env_qty]
+    episodes = {'option': [[] for i in range(env_qty)], 
+                'color': [[] for i in range(env_qty)], 
+                'coordinate': [[] for i in range(env_qty)],
+                'observation': [[] for i in range(env_qty)],
+                'obj_idx': [[] for i in range(env_qty)],
+                'action': [[] for i in range(env_qty)],
+                'render': [[] for i in range(env_qty)]}
+
+    obs = vec_env.reset()
+    while np.min(idx_to_episode) < total_quantity_of_trajectories:
+        action, action_info = agent.get_actions(obs, cur_options, cur_obj_idxs)
+        outp_obs, rewards, dones, env_infos = vec_env.step(action)
+        for i in range(env_qty):
+            if idx_to_episode[i] < total_quantity_of_trajectories:
+                episodes['option'][idx_to_episode[i]].append(cur_options[i])
+                episodes['color'][idx_to_episode[i]].append(cur_colors[i])
+                episodes['obj_idx'][idx_to_episode[i]].append(cur_obj_idxs[i])
+                episodes['action'][idx_to_episode[i]].append(action[i])
+                episodes['coordinate'][idx_to_episode[i]].append(env_infos[i]['before_coordinates'])
+                episodes['observation'][idx_to_episode[i]].append(outp_obs[i])
+                if 'render' in env_infos[i].keys():
+                    episodes['render'][idx_to_episode[i]].append(env_infos[i]['render'])
+            if dones[i]:
+                episodes['coordinate'][idx_to_episode[i]].append(env_infos[i]['after_coordinates'])
+                episodes['observation'][idx_to_episode[i]].append(env_infos[i]['terminal_observation'])
+                if 'render' in env_infos[i].keys():
+                    episodes['render'][idx_to_episode[i]].append(env_infos[i]['render'])
+                idx_to_episode[i] = np.max(idx_to_episode) + 1
+                
+                if (idx_to_episode[i] < total_quantity_of_trajectories):
+                    episodes['option'].append([]), episodes['color'].append([]), episodes['obj_idx'].append([])
+                    episodes['coordinate'].append([]), episodes['observation'].append([]), episodes['render'].append([])
+                    episodes['action'].append([])
+
+                    cur_options[i], cur_obj_idxs[i] = options[idx_to_episode[i]], obj_idxs[idx_to_episode[i]]
+                    cur_colors[i] = colors[idx_to_episode[i]]
+
+    for i in range(len(episodes['option'])):
+        for key in episodes.keys():
+            episodes[key][i] = np.array(episodes[key][i])
+    vec_env.close()
+    return episodes
+        
 
 def train_cycle(trainer_config, agent, skill_model, static_object_extractor, 
                 replay_buffer, make_env_fn, seed, comet_logger):
-    n_objects = make_env_fn(seed = 0).n_obj
     env = AsyncVectorEnv([lambda: make_env_fn(seed = (seed + i)) for i in range(trainer_config.n_parallel)], context='spawn')
-    
+
+    obs, terminated, truncated, options, obj_idxs = None, None, None, None, None
     prev_cur_step, cur_step = 0, 0
     for i in range(trainer_config.n_epochs):
         agent.inference()
-        trajs = collect_train_trajectories(env = env, agent = agent, skill_model = skill_model, 
-                                           skills_per_traj = trainer_config.skills_per_trajectory, n_objects = n_objects,
-                                           trajectories_qty = trainer_config.traj_batch_size, 
-                                           trajectories_length = trainer_config.max_path_length)
+        trajs, obs, terminated, truncated, options, obj_idxs =\
+            continue_random_trajectories_generation(vec_env = env, agent = agent, skill_model = skill_model,
+                                                    total_steps = trainer_config.collection_steps, obs = obs,
+                                                    terminated = terminated, truncated = truncated, options = options,
+                                                    obj_idxs = obj_idxs)
+        
         prev_cur_step = cur_step
-        for traj in trajs['dones']:
-            cur_step += len(traj)
-        replay_buffer.update_replay_buffer(trajs)
-        replay_buffer.prepare_sampling()
+        cur_step += trainer_config.collection_steps
+        replay_buffer.update_buffer(trajs)
+        replay_buffer.prepare_for_sampling()
         if (replay_buffer.n_transitions_stored < trainer_config.transitions_before_training):
             continue
         
@@ -258,8 +297,8 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
         policy_stats = StatisticsCalculator('policy')
 
         for i in range(trainer_config.trans_optimization_epochs):
-            batch = replay_buffer.sample_transitions()
-            batch = prepare_batch(batch)
+            # TODO fix me, changing hardcoded batch size to a config one
+            batch = replay_buffer.sample(256)
             logs = static_object_extractor.optimize_oe(batch['observations'], batch['next_observations'])
             object_extractor_stats.save_iter(logs)
             extracted_objects = static_object_extractor.extract(batch['observations'])
@@ -271,7 +310,7 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
             skill_stats.save_iter(logs)
             logs = agent.optimize_op(observations = batch['observations'], next_observations = batch['next_observations'], 
                                      obj_idxs = batch['obj_idxs'], options = batch['options'], 
-                                     actions = batch['actions'], dones = batch['dones'], rewards = rewards)
+                                     actions = batch['actions'], dones = batch['terminated'], rewards = rewards)
             policy_stats.save_iter(logs)
         
         if (prev_cur_step // trainer_config.log_frequency) < (cur_step // trainer_config.log_frequency):
@@ -281,35 +320,25 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
         
         if (prev_cur_step // trainer_config.eval_frequency) < (cur_step // trainer_config.eval_frequency):
             eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
-                         num_random_trajectories = 48, traj_length = trainer_config.max_path_length,
-                         gamma = agent.discount, sample_processor = replay_buffer.preprocess_data,
+                         num_random_trajectories = 48, gamma = agent.discount, 
                          device = "cuda:0", comet_logger = comet_logger, step = cur_step)
         prev_cur_step = cur_step
 
-def render_ori_trajectories(options, colors, n_slots, n_objects, eval_env_maker, agent):
+def render_coordinate_trajectories(n_slots, n_objects, trajectories):
     fig, axs = plt.subplots(nrows = n_slots, ncols = n_objects)
     fig.set_size_inches(15, 15)
     if isinstance(axs, matplotlib.axes._axes.Axes):
         axs = [[axs]]
     
-    random_trajectories = []
     for slot_i in range(n_slots):
-        obj_idxs = np.zeros(options.shape[:-1], dtype = np.int32) + slot_i
-        eval_env = eval_env_maker()
-        obj_trajectories = collect_eval_trajectories(env = eval_env, agent = agent, 
-                                                     options = options, obj_idxs = obj_idxs)
-        eval_env.close()
-        del eval_env
-        
+        coordinates_of_objects = trajectories['coordinate'][slot_i]
+        color = trajectories['color'][slot_i]
         for obj_i in range(n_objects):
-            coordinates = obj_trajectories['coordinates'][:, :, obj_i]
-            last_coordinate = obj_trajectories['next_coordinates'][:, -1:, obj_i]
             # Pad coordinates with last observed position, whilst it is guaranteed that options are consistent
             # across trajectories, thus simply copy last options color one additional time
-            tmp_coordinates = np.concatenate([coordinates, last_coordinate], axis = 1)
+            coordinates = [coordinates_of_objects[episode][:, obj_i] for episode in range(len(coordinates_of_objects))]
             axs[slot_i][obj_i].set_title(f'Slot №{slot_i} Object №{obj_i}')
-            render_trajectories(tmp_coordinates, colors, None, axs[slot_i][obj_i])
-        random_trajectories.append(obj_trajectories)
+            render_trajectories(coordinates, color, None, axs[slot_i][obj_i])
     fig.canvas.draw()
     skill_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype = np.uint8)
     skill_img = skill_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
@@ -318,25 +347,25 @@ def render_ori_trajectories(options, colors, n_slots, n_objects, eval_env_maker,
         for ax in sub_axs:
             ax.clear()
     plt.close(fig)
-    return skill_img, random_trajectories
+    return skill_img
 
 def render_phi_plot(skill_model, static_object_extractor, 
-                    random_trajectories, eval_color, sample_processor, device):
-    fig, axs = plt.subplots(1, len(random_trajectories))
+                    random_trajectories, eval_color, device,
+                    n_slots):
+    fig, axs = plt.subplots(1, n_slots)
     fig.set_size_inches(15, 15)
     if isinstance(axs, matplotlib.axes._axes.Axes):
         axs = [axs]
-
-    for i, random_trajectories_per_slot in enumerate(random_trajectories):
-        data = sample_processor(random_trajectories_per_slot)
-        last_obs = torch.stack([torch.from_numpy(ob[-1]).to(device) for ob in data['observations']]).float()
-        last_obj_idx = torch.tensor([ob[-1].item() for ob in data['obj_idxs']]).to(device)
+    
+    for slot_i in range(n_slots):
+        last_obs = torch.stack([torch.from_numpy(ob[-1]).to(device) for ob in random_trajectories['observation'][slot_i]]).float()
+        last_obj_idx = torch.tensor([ob[-1].item() for ob in random_trajectories['obj_idx'][slot_i]]).to(device)
         
         extracted_objects = static_object_extractor.extract(last_obs)
         means, stds, samples = skill_model.fetch_encoder_representation(last_obs, extracted_objects, last_obj_idx)
-        axs[i].set_title(f'Object №{i}')
-        draw_2d_gaussians(means, stds, eval_color, axs[i])
-        draw_2d_gaussians(samples, [[0.03, 0.03]] * len(samples), eval_color, axs[i], fill=True, 
+        axs[slot_i].set_title(f'Object №{slot_i}')
+        draw_2d_gaussians(means, stds, eval_color, axs[slot_i])
+        draw_2d_gaussians(samples, [[0.03, 0.03]] * len(samples), eval_color, axs[slot_i], fill=True, 
                           use_adaptive_axis=True)
     fig.canvas.draw()
     phi_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
@@ -348,34 +377,49 @@ def render_phi_plot(skill_model, static_object_extractor,
     return phi_img
 
 def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor, 
-                 num_random_trajectories, traj_length, gamma, sample_processor, device, comet_logger, step):
+                 num_random_trajectories, gamma, device, comet_logger, step):
+    # TODO fix logging, check arrays. Maybe refactoring is beneficial! (For example, move keys around, move obj indexes inside array)
     example_env = make_env_fn(seed = 0)
     traj_env_maker = lambda: AsyncVectorEnv([lambda: make_env_fn(seed = i) for i in range(4)], context = 'spawn')
-    eval_options, eval_color = skill_model.sample_eval_options(num_random_trajectories, traj_length)
-    n_objects = example_env.n_obj
-    n_slots = n_objects
+    eval_options, eval_color = skill_model.sample_eval_options(num_random_trajectories)
+    n_objects, n_slots = example_env.n_obj, example_env.n_obj
 
     agent.eval()
-    skill_img, option_trajectories = render_ori_trajectories(options = eval_options, colors = eval_color, 
-                                                             n_slots = n_slots, n_objects = n_objects, eval_env_maker = traj_env_maker, 
-                                                             agent = agent)
+    
+    # All trajectories[key] is of shape slot_qty x episode_qty x episode_len x key.shape
+    all_trajectories = {}
+    eval_slots = [np.full(eval_options.shape[0], fill_value = i) for i in range(n_slots)]
+    for slot_i in range(n_slots):
+        per_slot_trajectories = collect_specific_trajectories(traj_env_maker(), agent = agent, options = eval_options, 
+                                                              obj_idxs = eval_slots[slot_i], colors = eval_color)
+        if not all_trajectories:
+            for key in per_slot_trajectories:
+                all_trajectories[key] = [per_slot_trajectories[key]]
+        else:
+            for key in per_slot_trajectories:
+                all_trajectories[key].append(per_slot_trajectories[key])
+
+    skill_img = render_coordinate_trajectories(n_slots = n_slots, n_objects = example_env.n_obj,
+                                               trajectories = all_trajectories)
     comet_logger.log_image(image_data = skill_img, name = "Skill trajs", step = step)
     phi_img = render_phi_plot(skill_model = skill_model, static_object_extractor = static_object_extractor, 
-                              random_trajectories = option_trajectories, 
-                              eval_color = eval_color, sample_processor = sample_processor, device = device)
+                              random_trajectories = all_trajectories, 
+                              eval_color = eval_color, device = device, n_slots = n_slots)
     comet_logger.log_image(image_data = phi_img, name = "Phi plot", step = step)
-    comet_logger.log_metrics({'Val/gathered_reward': calculate_validation_rewards(trajectories = option_trajectories,
-                                                                                  static_object_extractor = static_object_extractor,
-                                                                                  skill_model = skill_model)})
+    val_rewards = calculate_validation_rewards(trajectories = all_trajectories,
+                                               static_object_extractor = static_object_extractor,
+                                               skill_model = skill_model, n_slots = n_slots)
+    comet_logger.log_metrics({f'Val/{key}': val_rewards[key] for key in val_rewards.keys()})
+
     # Videos
     videos = []
-    video_options = skill_model.sample_fixated_options(traj_length)
+    video_options = skill_model.sample_fixated_options()
     for slot_idx in range(n_slots):
         video_env = AsyncVectorEnv([lambda: make_env_fn(seed = i, render_info = True) for i in range(2)], context = 'spawn')
         obj_idxs = np.zeros(video_options.shape[:-1], dtype = np.int32) + slot_idx
-        video_trajectories = collect_eval_trajectories(env = video_env, agent = agent, options = video_options, obj_idxs = obj_idxs)
+        video_trajectories = collect_specific_trajectories(vec_env = video_env, agent = agent, 
+                                                           options = video_options, obj_idxs = obj_idxs)
         videos.append(video_trajectories['render'])
-        video_env.close()
 
     agent.train()
     for i, skills_videos in enumerate(videos):
@@ -384,32 +428,39 @@ def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
     
     mets = {}
     if n_objects == 1:
-        mets.update(calc_eval_metrics(option_trajectories[0]['coordinates'], example_env.env_discretizer()))
+        mets.update(calc_eval_metrics([all_trajectories['coordinate'][slot_i][ep_i][:, slot_i] \
+                                       for ep_i in range(len(all_trajectories['coordinate'][slot_i]))], example_env.env_discretizer()))
     else:
-        for obj_idx in range(n_objects):
-            mets.update(calc_eval_metrics(option_trajectories[obj_idx]['coordinates'][:, :, obj_idx], 
+        for slot_i in range(n_slots):
+            mets.update(calc_eval_metrics([all_trajectories['coordinate'][slot_i][ep_i][:, slot_i] \
+                                           for ep_i in range(len(all_trajectories['coordinate'][slot_i]))], 
                                           example_env.env_discretizer(), 
-                                          prefix = f'Object№{obj_idx}'))
-    for obj_idx in range(n_objects):
-        rewards = skill_model.calculate_rewards(observations = option_trajectories[obj_idx]['observations'], 
-                                                next_observations = option_trajectories[obj_idx]['next_observations'],
+                                          prefix = f'Slot№{slot_i}'))
+    """    
+    for slot_i in range(n_slots):
+        for episode in range(len(all_trajectories['observation'][slot_i])):
+            obs = all_trajectories['observation'][slot_i][episode][:-1]
+            next_obs = all_trajectories['observation'][slot_i][episode][1:]
+        rewards = skill_model.calculate_rewards(observations = obs, 
+                                                next_observations = next_obs,
                                                 static_object_extractor = static_object_extractor,
-                                                options = option_trajectories[obj_idx]['options'], 
-                                                obj_idxs = option_trajectories[obj_idx]['obj_idxs'])
-        values = agent.inference_value(observations = option_trajectories[obj_idx]['observations'],
-                                       actions = option_trajectories[obj_idx]['actions'],
-                                       options = option_trajectories[obj_idx]['options'],
-                                       obj_idxs = option_trajectories[obj_idx]['obj_idxs'])
+                                                options = all_trajectories['option'][slot_i], 
+                                                obj_idxs = all_trajectories['obj_idx'][slot_i])
+        values = agent.inference_value(observations = obs,
+                                       actions = all_trajectories['action'][slot_i],
+                                       options = all_trajectories['option'][slot_i],
+                                       obj_idxs = all_trajectories['obj_idx'][slot_i])
 
         mc_value_differences = monte_carlo_value_difference(rewards, gamma = gamma)
         predicted_value_differences = values - values[:, -2: -1].repeat(values.shape[1], axis = 1) *\
             (np.fliplr(np.cumprod(np.ones(values.shape) * gamma, axis = 1)) / gamma)
-        mets.update({f'Truncated_returns№{obj_idx}': np.mean(mc_value_differences)})
-        mets.update({f'Predicted_truncated_returns№{obj_idx}': np.mean(predicted_value_differences)})
-        mets.update({f'Mean_error№{obj_idx}': np.mean(mc_value_differences - predicted_value_differences)})
-        mets.update({f'Mean_absolute_error№{obj_idx}': np.mean(np.abs(mc_value_differences - predicted_value_differences))})
-        mets.update({f'Values_№{obj_idx}': np.mean(values)})
+        mets.update({f'Truncated_returns№{slot_i}': np.mean(mc_value_differences)})
+        mets.update({f'Predicted_truncated_returns№{slot_i}': np.mean(predicted_value_differences)})
+        mets.update({f'Mean_error№{slot_i}': np.mean(mc_value_differences - predicted_value_differences)})
+        mets.update({f'Mean_absolute_error№{slot_i}': np.mean(np.abs(mc_value_differences - predicted_value_differences))})
+        mets.update({f'Values_№{slot_i}': np.mean(values)})
     mets = {f'Object_val/{key}': val for key, val in mets.items()}
+    """
     comet_logger.log_metrics(mets, step = step)
     example_env.close()
     del example_env, video_env

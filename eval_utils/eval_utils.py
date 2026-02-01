@@ -68,16 +68,24 @@ def monte_carlo_value_difference(rewards, gamma):
         value_difference[:, :i] = value_difference[:, :i] + rewards[:, :i]
     return value_difference
 
-def calculate_validation_rewards(trajectories, static_object_extractor, skill_model):
+def calculate_validation_rewards(trajectories, static_object_extractor, skill_model, n_slots):
     tr = copy.deepcopy(trajectories)
     rewards = []
-    for i in range(len(tr)):
-        rewards.append(skill_model.calculate_rewards(observations = tr[i]['observations'],
-                                            next_observations = tr[i]['next_observations'],
-                                            static_object_extractor = static_object_extractor,
-                                            options = tr[i]['options'],
-                                            obj_idxs = tr[i]['obj_idxs']))
-    return np.mean(np.concatenate(rewards, axis = 0))
+    for slot_i in range(n_slots):
+        for episode_i in range(len(tr['observation'][slot_i])):
+            observations = np.expand_dims(tr['observation'][slot_i][episode_i][:-1], axis = 0)
+            next_observations = np.expand_dims(tr['observation'][slot_i][episode_i][1:], axis = 0)
+            options = np.expand_dims(tr['option'][slot_i][episode_i], axis = 0)
+            obj_idxs = np.expand_dims(tr['obj_idx'][slot_i][episode_i], axis = 0)
+            rewards.append(skill_model.calculate_rewards(observations = observations,
+                                                         next_observations = next_observations,
+                                                         static_object_extractor = static_object_extractor,
+                                                         options = options, obj_idxs = obj_idxs))
+            rewards[-1] = np.squeeze(rewards[-1])
+    all_rewards = np.concatenate(rewards, axis = 0)
+    nonzero_rewards = all_rewards[np.allclose(all_rewards, 0, atol=1e-05)]
+    return {'Mean_reward': np.mean(all_rewards),
+            'Mean_nonzero_reward': np.mean(nonzero_rewards)}
 
 class StatisticsCalculator():
     def __init__(self, name):

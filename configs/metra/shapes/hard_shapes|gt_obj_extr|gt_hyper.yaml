@@ -1,14 +1,14 @@
 env:
   name: "decoupled_shapes"
   normalizer_type: 'shapes'
-  max_path_length: ${trainer_args.max_path_length}
+  max_path_length: 40
   frame_stack: null
   env_kwargs:
     num_objects_range: [4, 4]
+    arena_size: 3
 
 trainer_args:
   trans_optimization_epochs: 50
-  max_path_length: 25
 
 replay_buffer:
   common:

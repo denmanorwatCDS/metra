@@ -2,12 +2,11 @@ env:
   name: "ant"
   normalizer_type: "preset"
   env_kwargs: null
-  max_path_length: ${trainer_args.max_path_length}
+  max_path_length: 200
   frame_stack: null
 
 trainer_args:
   trans_optimization_epochs: 50
-  max_path_length: 200
 
 replay_buffer:
   common:
