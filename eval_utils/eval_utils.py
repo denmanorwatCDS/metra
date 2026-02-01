@@ -83,7 +83,7 @@ def calculate_validation_rewards(trajectories, static_object_extractor, skill_mo
                                                          options = options, obj_idxs = obj_idxs))
             rewards[-1] = np.squeeze(rewards[-1])
     all_rewards = np.concatenate(rewards, axis = 0)
-    nonzero_rewards = all_rewards[np.allclose(all_rewards, 0, atol=1e-05)]
+    nonzero_rewards = all_rewards[np.logical_not(np.isclose(all_rewards, 0, atol=1e-05))]
     return {'Mean_reward': np.mean(all_rewards),
             'Mean_nonzero_reward': np.mean(nonzero_rewards)}
 
