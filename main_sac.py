@@ -378,7 +378,6 @@ def render_phi_plot(skill_model, static_object_extractor,
 
 def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor, 
                  num_random_trajectories, gamma, device, comet_logger, step):
-    # TODO fix logging, check arrays. Maybe refactoring is beneficial! (For example, move keys around, move obj indexes inside array)
     example_env = make_env_fn(seed = 0)
     traj_env_maker = lambda: AsyncVectorEnv([lambda: make_env_fn(seed = i) for i in range(4)], context = 'spawn')
     eval_options, eval_color = skill_model.sample_eval_options(num_random_trajectories)

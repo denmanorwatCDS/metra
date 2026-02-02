@@ -38,7 +38,7 @@ class ConsistentNormalizedEnv(AkroWrapperTrait, gym.Wrapper):
 
     def _apply_normalize_obs(self, obs):
         normalized_obs = (obs - self._obs_mean) / (np.sqrt(self._obs_var) + 1e-8)
-        return normalized_obs
+        return normalized_obs.astype(obs.dtype)
 
     def reset(self, **kwargs):
         obs = self.env.reset(**kwargs)

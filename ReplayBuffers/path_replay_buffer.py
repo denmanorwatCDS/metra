@@ -41,12 +41,12 @@ class StateSequence:
             for finished_env in finished_envs:
                 self.local_trajectory_bounds[finished_env].append((start[finished_env], i))
                 start[finished_env] = None
-                if i != self._length:
+                if i != self._length - 1:
                     start[finished_env] = i + 1
         
-        for s in start:
+        for i, s in enumerate(start):
             if s is not None:
-                self.local_trajectory_bounds[finished_env].append((s, None))
+                self.local_trajectory_bounds[i].append((s, None))
 
     def __len__(self):
         return self._length
@@ -85,7 +85,7 @@ class CyclicBuffer:
 
     def update_buffer(self, state_sequence):
         for env_idx in range(self.env_qty):
-            while (not (self._oldest_occupied_index[env_idx] == np.ma.masked)) and\
+            while (not (np.ma.is_masked(self._oldest_occupied_index[env_idx]))) and\
                   len(state_sequence) > ((self._oldest_occupied_index[env_idx] - self._next_free_index[env_idx]) % self.transitions_per_env):
                 start = self._oldest_occupied_index[env_idx]
                 end = self._start_to_end[env_idx].pop(start)
@@ -96,11 +96,14 @@ class CyclicBuffer:
                 removed_indexes = np.arange(start, end + 1) % self.transitions_per_env
                 self._mask[env_idx][removed_indexes] = True
             
+            if np.ma.is_masked(self._oldest_occupied_index[env_idx]):
+                self._oldest_occupied_index[env_idx] = 0
+            
             overwritten_indexes = np.arange(self._next_free_index[env_idx], 
                                             self._next_free_index[env_idx] + len(state_sequence)) % self.transitions_per_env
             for key in state_sequence.keys():
                 self._data[key][env_idx][overwritten_indexes] = state_sequence[key][env_idx]
-                self._mask[env_idx][overwritten_indexes] = False
+            self._mask[env_idx][overwritten_indexes] = False
             for local_start, local_end in state_sequence.local_trajectory_bounds[env_idx]:
                 global_start = (self._next_free_index[env_idx] + local_start) % self.transitions_per_env
                 if self._start_of_non_ended_trajectories[env_idx] is not None:
@@ -112,7 +115,7 @@ class CyclicBuffer:
                     local_end = len(state_sequence) - 1
                 global_end = (self._next_free_index[env_idx] + local_end) % self.transitions_per_env
                 self._start_to_end[env_idx][global_start] = global_end
-            self._next_free_index[env_idx] += global_end + 1
+            self._next_free_index[env_idx] = global_end + 1
 
     def prepare_for_sampling(self):
         valid_entries = np.logical_not(self._mask).astype(bool)
