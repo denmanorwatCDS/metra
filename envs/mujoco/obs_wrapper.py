@@ -8,7 +8,7 @@ class ExpanderWrapper(AkroWrapperTrait, Wrapper):
         super().__init__(env)
         self.action_space = self.env.action_space
         akro_box = Box(low = np.expand_dims(self.env.observation_space.low, axis = 0),
-                       high = np.expand_dims(self.env.observation_space.high, axis = 0),
+                       high = np.expand_dims(self.env.observation_space.low, axis = 0),
                        dtype = np.float32)
         self.observation_space = akro_box
     

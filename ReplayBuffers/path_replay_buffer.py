@@ -122,6 +122,7 @@ class CyclicBuffer:
         all_indexes_in_memory = np.arange(self.env_qty * self.transitions_per_env).\
             reshape(self.env_qty, self.transitions_per_env)[valid_entries]
         self.sampling_indexes = all_indexes_in_memory
+        pass
     
     def sample(self, size):
         samples = self.rng.choice(self.sampling_indexes, size = size, replace = False)
