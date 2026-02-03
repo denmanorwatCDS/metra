@@ -204,13 +204,11 @@ def continue_random_trajectories_generation(vec_env, agent, skill_model, total_s
                          options = options, obj_idxs = obj_idxs, 
                          terminated = terminated, truncated = truncated)
         
-        if np.any(dones):
-            new_options, new_obj_idxs = [], []
-            for i in range(np.sum(dones)):
+        for i, done in enumerate(dones):
+            if done:
                 new_option, new_obj_idx = skill_model.sample_option_and_obj_idx()
-                new_options.append(new_option), new_obj_idxs.append(new_obj_idx)
-            new_options, new_obj_idxs = np.array(new_options), np.array(new_obj_idxs)
-            options[dones], obj_idxs[dones] = new_options, new_obj_idxs
+                options[i], obj_idxs[i] = new_option, new_obj_idx
+
         obs = outp_obs
         steps += env_qty
 
@@ -311,7 +309,7 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
             logs = agent.optimize_op(observations = batch['observations'], next_observations = batch['next_observations'], 
                                      obj_idxs = batch['obj_idxs'], options = batch['options'], 
                                      actions = batch['actions'], 
-                                     dones = torch.logical_or(batch['terminated'], batch['truncated']), 
+                                     dones = batch['terminated'], 
                                      rewards = rewards)
             policy_stats.save_iter(logs)
         
