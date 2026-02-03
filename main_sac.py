@@ -14,7 +14,7 @@ from networks.extractors.static_extractor import get_object_extractor
 from RL.policies.sac import SAC
 from gym.vector import AsyncVectorEnv
 from eval_utils.traj_utils import draw_2d_gaussians, render_trajectories, calc_eval_metrics
-from eval_utils.eval_utils import StatisticsCalculator, monte_carlo_value_difference, calculate_validation_rewards
+from eval_utils.eval_utils import StatisticsCalculator, calculate_validation_rewards
 from eval_utils.video_utils import record_video
 from gym.wrappers import TimeLimit
 from copy import deepcopy
@@ -310,7 +310,9 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
             skill_stats.save_iter(logs)
             logs = agent.optimize_op(observations = batch['observations'], next_observations = batch['next_observations'], 
                                      obj_idxs = batch['obj_idxs'], options = batch['options'], 
-                                     actions = batch['actions'], dones = batch['terminated'], rewards = rewards)
+                                     actions = batch['actions'], 
+                                     dones = torch.logical_or(batch['terminated'], batch['truncated']), 
+                                     rewards = rewards)
             policy_stats.save_iter(logs)
         
         if (prev_cur_step // trainer_config.log_frequency) < (cur_step // trainer_config.log_frequency):

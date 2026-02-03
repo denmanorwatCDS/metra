@@ -121,7 +121,7 @@ class CyclicBuffer:
         valid_entries = np.logical_not(self._mask).astype(bool)
         all_indexes_in_memory = np.arange(self.env_qty * self.transitions_per_env).\
             reshape(self.env_qty, self.transitions_per_env)[valid_entries]
-        self.sampling_indexes = all_indexes_in_memory.reshape(-1)
+        self.sampling_indexes = all_indexes_in_memory
     
     def sample(self, size):
         samples = self.rng.choice(self.sampling_indexes, size = size, replace = False)
@@ -134,7 +134,6 @@ class CyclicBuffer:
     @property
     def n_transitions_stored(self):
         return len(self.sampling_indexes)
-
 
 
 class PathBuffer:
