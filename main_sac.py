@@ -246,7 +246,7 @@ def collect_specific_trajectories(vec_env, agent, options, obj_idxs, colors = No
                 episodes['observation'][idx_to_episode[i]].append(outp_obs[i])
                 if 'render' in env_infos[i].keys():
                     episodes['render'][idx_to_episode[i]].append(env_infos[i]['render'])
-            if dones[i]:
+            if dones[i] and idx_to_episode[i] < total_quantity_of_trajectories:
                 episodes['coordinate'][idx_to_episode[i]].append(env_infos[i]['after_coordinates'])
                 episodes['observation'][idx_to_episode[i]].append(env_infos[i]['terminal_observation'])
                 if 'render' in env_infos[i].keys():
