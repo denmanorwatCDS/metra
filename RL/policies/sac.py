@@ -58,6 +58,7 @@ class SAC(torch.nn.Module):
         return False
     
     def inference(self):
+        self.actor._force_use_mode_actions = False
         self.actor.eval(), self.critic1.eval(), self.critic2.eval(), self.pooler.eval(),\
             self.target_critic1.eval(), self.target_critic2.eval(), self.target_pooler.eval()
 

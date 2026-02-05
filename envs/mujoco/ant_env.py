@@ -29,7 +29,6 @@ def q_mult(a, b):  # multiply two quaternion
 class AntEnv(MujocoTrait, mujoco_env.MujocoEnv, utils.EzPickle):
 
     def __init__(self,
-                 seed,
                  model_path=None,
                  render_hw = 100,
                  render_info=False,
@@ -41,8 +40,6 @@ class AntEnv(MujocoTrait, mujoco_env.MujocoEnv, utils.EzPickle):
 
         self._body_com_indices = {}
         self._body_comvel_indices = {}
-        self.seed_ = seed
-        self.np_rng = np.random.default_rng(seed)
 
         self.render_hw = render_hw
         self.render_info = render_info
@@ -55,11 +52,9 @@ class AntEnv(MujocoTrait, mujoco_env.MujocoEnv, utils.EzPickle):
         mujoco_env.MujocoEnv.__init__(self, model_path, 5)
 
     def step(self, a):
-        before_xpos = self.sim.data.qpos.flat[0]
-        before_ypos = self.sim.data.qpos.flat[1]
+        before_xpos, before_ypos, _ = self.get_body_com('torso')
         self.do_simulation(a, self.frame_skip)
-        after_xpos = self.sim.data.qpos.flat[0]
-        after_ypos = self.sim.data.qpos.flat[1]
+        after_xpos, after_ypos, _ = self.get_body_com('torso')
 
         done = self._get_done()
 
@@ -86,9 +81,9 @@ class AntEnv(MujocoTrait, mujoco_env.MujocoEnv, utils.EzPickle):
         return False
 
     def reset_model(self):
-        qpos = self.init_qpos + self.np_rng.uniform(
+        qpos = self.init_qpos + self._np_random.uniform(
                 size=self.sim.model.nq, low=-.1, high=.1)
-        qvel = self.init_qvel + self.np_rng.standard_normal(self.sim.model.nv) * .1
+        qvel = self.init_qvel + self._np_random.standard_normal(self.sim.model.nv) * .1
 
         qpos[15:] = self.init_qpos[15:]
         qvel[14:] = 0.

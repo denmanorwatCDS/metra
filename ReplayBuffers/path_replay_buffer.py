@@ -148,10 +148,11 @@ class PathBuffer:
 
     """
 
-    def __init__(self, capacity_in_transitions, batch_size, pixel_keys, seed):
+    def __init__(self, capacity_in_transitions, batch_size, device, pixel_keys, seed):
         self._capacity = capacity_in_transitions
         self.batch_size = batch_size
         self._first_idx_of_next_path = 0
+        self.device = device
         # Each path in the buffer has a tuple of two ranges in
         # self._path_segments. If the path is stored in a single contiguous
         # region of the buffer, the second range will be range(0, 0).
@@ -260,19 +261,19 @@ class PathBuffer:
         else:
             self._first_idx_of_next_path = first_seg.stop
 
-    def prepare_sampling(self):
+    def prepare_for_sampling(self):
         relevant_indicies = []
         for path in self._path_segments:
             relevant_indicies += list(path[0]) + list(path[1])
         self.relevant_indicies = np.array(relevant_indicies)
 
     def fetch_transitions(self, idxs):
-        batch = {key: buf_arr[idxs] for key, buf_arr in self._buffer.items()}
+        batch = {key: torch.from_numpy(buf_arr[idxs]).to(self.device) for key, buf_arr in self._buffer.items()}
         for key in self._pixel_keys:
             batch[key] = ((batch[key].astype(np.float32) - (255 / 2)) / (255 / 2))
         return batch
 
-    def sample_transitions(self, batch_size = None):
+    def sample(self, batch_size = None):
         """Sample a batch of transitions from the buffer.
 
         Args:

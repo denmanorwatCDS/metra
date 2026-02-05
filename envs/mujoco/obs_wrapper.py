@@ -12,8 +12,8 @@ class ExpanderWrapper(AkroWrapperTrait, Wrapper):
                        dtype = np.float32)
         self.observation_space = akro_box
     
-    def reset(self):
-        obs = self.env.reset()
+    def reset(self, seed = None):
+        obs = self.env.reset(seed = seed)
         if obs.ndim == 1:
             obs = np.expand_dims(obs, axis = 0).astype(np.float32)
         return obs

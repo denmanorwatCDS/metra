@@ -7,6 +7,7 @@ from pathlib import Path
 from matplotlib import colors
 from spriteworld import renderers as spriteworld_renderers
 from spriteworld.sprite import Sprite
+from gym.utils import seeding
 
 from envs.shapes.push_env.utils import l1_norm
 
@@ -17,7 +18,7 @@ SCALES = [0.15]
 class BaseEnv:
     metadata = {"render.modes": ["rgb_array", "state", "image", "mask"]}
 
-    def __init__(self, seed, arena_size = 1.,
+    def __init__(self, arena_size = 1.,
                  render_mode = 'rgb_array', render_info = False, obs_size = 64, obs_channels = 3,
                  num_objects_range = [4, 4], moving_step_size = 0.05, 
                  wo_agent = False, max_steps = 100, agent_pos = [0.5, 0.5],
@@ -44,8 +45,6 @@ class BaseEnv:
         self._SCALES = [shape_scale / arena_size for shape_scale in SCALES]
         self._AGENT = agent_params
         self.render_info = render_info
-        self.seed_ = seed
-        self.np_rng = np.random.default_rng(seed)
         self.spec = None
 
         self.action_space = spaces.Box(low = -np.array([1, 1]),
@@ -101,7 +100,7 @@ class BaseEnv:
             return pos_min
         _min = pos_min + radius + eps
         _max = pos_max - radius - eps
-        return self.np_rng.uniform(_min, _max)
+        return self._np_random.uniform(_min, _max)
 
     def _fill_positions(
         self,
@@ -138,7 +137,7 @@ class BaseEnv:
         return objs
 
     def _set_objs(self):
-        self._num_objects = self.np_rng.choice(
+        self._num_objects = self._np_random.choice(
             list(range(self._num_objs_range[0], self._num_objs_range[1] + 1))
         )
         offset = (1 - 1 / self.arena_size) / 2
@@ -197,7 +196,9 @@ class BaseEnv:
         if mode == "rgb_array":
             return obs
 
-    def reset(self):
+    def reset(self, seed = None):
+        if seed is not None:
+            self._np_random, seed = seeding.np_random(seed)
         self._objs = self._set_objs()
         obs = self.render()
         return obs

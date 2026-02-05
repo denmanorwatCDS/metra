@@ -65,9 +65,9 @@ class HalfCheetahEnv(MujocoTrait, mujoco_env.MujocoEnv, utils.EzPickle):
         return obs
 
     def reset_model(self):
-        qpos = self.init_qpos + np.random.uniform(
+        qpos = self.init_qpos + self._np_random.uniform(
             low=-.1, high=.1, size=self.sim.model.nq)
-        qvel = self.init_qvel + np.random.randn(self.sim.model.nv) * .1
+        qvel = self.init_qvel + self._np_random.randn(self.sim.model.nv) * .1
         self.set_state(qpos, qvel)
         return self._get_obs()
 

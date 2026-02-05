@@ -10,12 +10,12 @@ from .base import BaseEnv
 from .utils import norm, l1_norm
 
 class PushEnv(BaseEnv):
-    def __init__(self, seed, arena_size = 1.,
+    def __init__(self, arena_size = 1.,
                  render_mode = 'rgb_array', render_info = False, obs_size = 224, obs_channels = 3,
                  num_objects_range = [4, 4], moving_step_size = 0.05, 
                  wo_agent = False, max_steps = 100, agent_pos = [0.5, 0.5],
                  use_bg = False, distance_to_agent = 0.08, distance_to_objs = 0.08, distance_to_wall = 0.08):
-        super(PushEnv, self).__init__(seed = seed, arena_size = arena_size, render_mode = render_mode, 
+        super(PushEnv, self).__init__(arena_size = arena_size, render_mode = render_mode, 
                                       render_info = render_info, obs_size = obs_size, obs_channels = obs_channels, 
                                       num_objects_range = num_objects_range, moving_step_size = moving_step_size, 
                                       wo_agent = wo_agent, max_steps = max_steps, agent_pos = agent_pos, use_bg = use_bg)
@@ -25,9 +25,9 @@ class PushEnv(BaseEnv):
 
     def _set_objs(self):
         objs = super()._set_objs()
-        colors = self.np_rng.choice(self._COLORS, size = self._num_objects, replace = False)
-        shapes = self.np_rng.choice(self._SHAPES, size = self._num_objects, replace = False)
-        scales = self.np_rng.choice(self._SCALES, size = self._num_objects, replace = True)
+        colors = self._np_random.choice(self._COLORS, size = self._num_objects, replace = False)
+        shapes = self._np_random.choice(self._SHAPES, size = self._num_objects, replace = False)
+        scales = self._np_random.choice(self._SCALES, size = self._num_objects, replace = True)
         for n_idx in range(self._num_objects):
             objs[n_idx][0] = colors[n_idx]
             objs[n_idx][1] = shapes[n_idx]
