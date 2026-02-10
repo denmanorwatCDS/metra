@@ -1,9 +1,6 @@
-import os
 import numpy as np
 from copy import deepcopy
-from PIL import Image
 from gym import spaces
-from pathlib import Path
 from matplotlib import colors
 from spriteworld import renderers as spriteworld_renderers
 from spriteworld.sprite import Sprite
@@ -221,8 +218,8 @@ class BaseEnv:
         )
         next_pos = deepcopy(self._objs[:, 3: 5])
         obs = self.render()
-        return obs, 0, self._prepare_info(obs, before_coordinates = prev_pos,
-                                               after_coordinates = next_pos), False
+        return obs, 0, False, self._prepare_info(obs, before_coordinates = prev_pos,
+                                                 after_coordinates = next_pos)
     
     def _prepare_info(self, obs, before_coordinates, after_coordinates):
         info = dict(

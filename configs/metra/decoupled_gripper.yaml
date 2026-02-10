@@ -1,12 +1,9 @@
-globals:
-  seed: 42
-
 env:
   name: "decoupled_gripper"
   normalizer_type: "off"
-  env_kwargs: 
-    object_qty: 1
-    object_names: ['box']
+  max_path_length: 100
+  env_kwargs: null
+  frame_stack: null
 
 trainer_args:
   trans_optimization_epochs: 50
@@ -15,7 +12,24 @@ replay_buffer:
   common:
     max_transitions: 1000000
 
+rl_algo:
+  slot_pooler:
+    name: Transformer
+    kwargs: 
+      num_layers: 1
+      nhead: 4
+      dim_feedforward: 192
+
+static_object_extractor:
+  type: 'Identity'
+
 skill:
-  name: "metra"
-  discrete: false
-  dim_option: 2
+  slot_pooler:
+    name: Fetcher
+    kwargs: {}
+  trajectory_encoder:
+    type: single
+    dim_option: ${skill.dim_option}
+    net:
+      hidden_sizes: ${globals.mlp_arch}
+      hidden_nonlinearity: ReLU

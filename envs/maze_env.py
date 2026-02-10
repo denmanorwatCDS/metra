@@ -2,7 +2,6 @@ import akro
 import gym
 import numpy as np
 
-
 class MazeEnv(gym.Env):
     def __init__(self, max_path_length, action_range=0.2):
         self.max_path_length = max_path_length

@@ -63,22 +63,9 @@ def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack, normalize
         env = AntEnv(render_hw = 100, render_info = render_info)
         env = ExpanderWrapper(env)
         env.reset(seed = seed)
-    elif env_name == 'gripper':
-        from envs.mujoco.gripper_env import MultipleFetchPickAndPlaceEnv
-        env = MultipleFetchPickAndPlaceEnv(seed = seed, obs_type = 'state', object_qty = env_kwargs.object_qty,
-                                           object_names = env_kwargs.object_names, 
-                                           render_info = render_info)
-        env = ExpanderWrapper(env)
-    elif env_name == 'pixel_gripper':
-        from envs.mujoco.gripper_env import MultipleFetchPickAndPlaceEnv
-        env = MultipleFetchPickAndPlaceEnv(seed = seed, obs_type = 'pixels', object_qty = env_kwargs.object_qty,
-                                           object_names = env_kwargs.object_names,
-                                           render_info = render_info)
     elif env_name == 'decoupled_gripper':
         from envs.mujoco.gripper_env import MultipleFetchPickAndPlaceEnv
-        env = MultipleFetchPickAndPlaceEnv(seed = seed, obs_type = 'decoupled_state', object_qty = env_kwargs.object_qty,
-                                           object_names = env_kwargs.object_names,
-                                           render_info = render_info)
+        env = MultipleFetchPickAndPlaceEnv(render_info = render_info)
     elif env_name == 'decoupled_shapes':
         from envs.shapes.push_env.push import PushEnv
         env = PushEnv(arena_size = env_kwargs.arena_size, render_mode = 'state', 

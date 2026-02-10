@@ -20,7 +20,6 @@ def convert_observation_to_space(observation):
 
     return space
 
-
 class MujocoTrait:
     def _set_action_space(self):
         bounds = self.model.actuator_ctrlrange.copy().astype(np.float32)
@@ -63,3 +62,4 @@ class MujocoTrait:
             })
 
         return eval_metrics
+
