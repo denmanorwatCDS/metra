@@ -66,6 +66,7 @@ def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack, normalize
     elif env_name == 'decoupled_gripper':
         from envs.mujoco.gripper_env import MultipleFetchPickAndPlaceEnv
         env = MultipleFetchPickAndPlaceEnv(render_info = render_info)
+        env.reset(seed = seed)
     elif env_name == 'decoupled_shapes':
         from envs.shapes.push_env.push import PushEnv
         env = PushEnv(arena_size = env_kwargs.arena_size, render_mode = 'state', 
