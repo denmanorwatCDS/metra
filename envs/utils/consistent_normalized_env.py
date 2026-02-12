@@ -111,7 +111,7 @@ def get_normalizer_preset(env):
         obs_sequence = []
         relevant_mask = np.zeros(env.observation_space.shape[-1], dtype = bool)
         relevant_mask[:6] = True
-        for i in range(100):
+        for i in range(1_000):
             obs = env.reset()
             obs[:, 4] = (np.random.randn() * 2.0385) 
             obs_sequence.append(obs[-1][relevant_mask])

@@ -271,6 +271,15 @@ class BaseEnv:
     def n_obj(self):
         # Account for agent
         return self._num_objs_range[1] + 1
+    
+    @property
+    def unwrapped(self):
+        """Completely unwrap this env.
+
+        Returns:
+            gym.Env: The base non-wrapped gym.Env instance
+        """
+        return self
 
     def env_discretizer(self):
         return lambda x: np.floor(x / self._moving_step_size)

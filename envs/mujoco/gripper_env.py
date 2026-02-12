@@ -299,7 +299,7 @@ class MultipleFetchPickAndPlaceEnv(MujocoTrait, utils.EzPickle):
         return self.object_qty + 1
     
     def env_discretizer(self):
-        return lambda x: np.floor(x / 0.05)
+        return lambda x: np.floor(x / 0.1)
 
 # ============= Override of MujocoTrait methods =============
 
@@ -347,4 +347,3 @@ def get_gripper_description(sim):
 
 def calculate_mean_std(env):
     action = env.action_space.sample()
-    
