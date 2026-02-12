@@ -55,6 +55,8 @@ class PushEnv(BaseEnv):
         touched_wall = False
         self._objs[-1, 3] += delta[0]
         self._objs[-1, 4] += delta[1]
+        if np.any(self._objs[-1, 3: 5] < self._objs[-1, 2] / 2) or np.any(self._objs[-1, 3: 5] > 1 - self._objs[-1, 2] / 2):
+            touched_wall = True
         moves = [delta]
         agent_size = self._AGENT[2]
         for i in range(self._num_objects):
