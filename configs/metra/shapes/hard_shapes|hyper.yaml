@@ -1,6 +1,5 @@
 env:
   name: "decoupled_shapes"
-  normalizer_type: 'shapes'
   max_path_length: 40
   frame_stack: null
   env_kwargs:
@@ -8,7 +7,7 @@ env:
     arena_size: 3
 
 trainer_args:
-  trans_optimization_epochs: 50
+  trans_optimization_epochs: 250
 
 replay_buffer:
   common:

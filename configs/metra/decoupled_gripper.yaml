@@ -1,12 +1,11 @@
 env:
   name: "decoupled_gripper"
-  normalizer_type: "off"
   max_path_length: 100
   env_kwargs: null
   frame_stack: null
 
 trainer_args:
-  trans_optimization_epochs: 50
+  trans_optimization_epochs: 250
 
 replay_buffer:
   common:

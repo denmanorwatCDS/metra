@@ -1,6 +1,5 @@
 env:
   name: "ant"
-  normalizer_type: "preset"
   env_kwargs: null
   max_path_length: 200
   frame_stack: null

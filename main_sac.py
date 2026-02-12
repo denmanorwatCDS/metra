@@ -8,7 +8,7 @@ import torch
 from ReplayBuffers.path_replay_buffer import StateSequence
 from envs.utils.consistent_normalized_env import consistent_normalize, get_normalizer_preset
 from envs.mujoco.obs_wrapper import ExpanderWrapper
-from ReplayBuffers.path_replay_buffer import PathBuffer, CyclicBuffer
+from ReplayBuffers.path_replay_buffer import CyclicBuffer
 from RL.skill_model.metra_v2 import METRA
 from networks.extractors.static_extractor import get_object_extractor
 from RL.policies.sac import SAC
@@ -52,8 +52,8 @@ def fetch_config():
 
     return rl_config, env_config_name
 
-def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack, normalizer_type, 
-             render_info = False):
+def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack,
+             render_info = False, normalizer_mean = None, normalizer_std = None):
     if env_name == 'half_cheetah':
         from envs.mujoco.half_cheetah_env import HalfCheetahEnv
         env = HalfCheetahEnv(render_hw = 100)
@@ -80,11 +80,6 @@ def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack, normalize
             env = RenderWrapper(env)
         else:
             raise NotImplementedError
-    # elif env_name == 'kitchen':
-    #    sys.path.append('lexa')
-    #    from envs.lexa.mykitchen import MyKitchenEnv
-    #    assert seed is None, 'For some strange reason, this environment does not have any seed...'
-    #    env = MyKitchenEnv(log_per_goal=True)
     else:
         raise NotImplementedError
 
@@ -97,14 +92,9 @@ def make_env(env_name, max_path_length, env_kwargs, seed, frame_stack, normalize
 
     # TODO Implement readeble normalizer_type, meaning it is different for images and states 
     # and different state environments
-    if normalizer_type == 'off':
+    if (normalizer_mean is None) and (normalizer_std is None):
         env = consistent_normalize(env, flatten_obs = False, normalize_obs = False, **normalizer_kwargs)
-    elif normalizer_type == 'squashed':
-        env = consistent_normalize(env, flatten_obs = False, normalize_obs = True, 
-                                   mean = 255. / 2, std = 255. / 2)
-    elif normalizer_type == 'preset':
-        normalizer_name = env_name
-        normalizer_mean, normalizer_std = get_normalizer_preset(f'{normalizer_name}_preset')
+    else:
         env = consistent_normalize(env, flatten_obs = False, normalize_obs = True, mean = normalizer_mean, std = normalizer_std, 
                                    **normalizer_kwargs)
     return env
@@ -122,11 +112,14 @@ def run():
 
     set_seed(config.globals.seed)
     # TODO check that seeding is correct, meaning that observations must be uncorrelated!
+    env = make_env(env_name = config.env.name, max_path_length = config.env.max_path_length,
+                   env_kwargs = config.env.env_kwargs, frame_stack = config.env.frame_stack, 
+                   seed = config.globals.seed)
+    normalizer_mean, normalizer_std = get_normalizer_preset(env)
     make_seeded_env = functools.partial(make_env, env_name = config.env.name, 
                                         max_path_length = config.env.max_path_length,
                                         env_kwargs = config.env.env_kwargs,
-                                        frame_stack = config.env.frame_stack, 
-                                        normalizer_type = config.env.normalizer_type)
+                                        frame_stack = config.env.frame_stack)
     env = make_seeded_env(seed = config.globals.seed, render_info = False)
     
     # TODO change shape

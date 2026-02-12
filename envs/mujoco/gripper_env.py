@@ -210,14 +210,14 @@ class MultipleFetchPickAndPlaceEnv(MujocoTrait, utils.EzPickle):
                                'object_ohe': [OBJECT_OHE['grip']]}
 
         for name in self.created_object_names:
-            objects_description['object_pos'].append(self.sim.data.get_site_xpos(name))
+            objects_description['object_pos'].insert(0, self.sim.data.get_site_xpos(name))
             # rotations
-            objects_description['object_rot'].append(rotations.mat2euler(self.sim.data.get_site_xmat(name)))
+            objects_description['object_rot'].insert(0, rotations.mat2euler(self.sim.data.get_site_xmat(name)))
 
-            objects_description['object_meta'].append(np.zeros(objects_description['object_meta'][0].shape))
+            objects_description['object_meta'].insert(0, np.zeros(objects_description['object_meta'][-1].shape))
             
             # Remove number from name, thus excluding last char of name
-            objects_description['object_ohe'].append(OBJECT_OHE[name[:-1]])
+            objects_description['object_ohe'].insert(0, OBJECT_OHE[name[:-1]])
         
         obs = np.concatenate([objects_description[key] for key in objects_description.keys()], axis = -1)
 
@@ -344,3 +344,7 @@ def get_gripper_description(sim):
             'rot': rotations.mat2euler(sim.data.get_site_xmat('robot0:grip')),
             'velp': sim.data.get_site_xvelp('robot0:grip'),
             'velr': sim.data.get_site_xvelr('robot0:grip')}
+
+def calculate_mean_std(env):
+    action = env.action_space.sample()
+    

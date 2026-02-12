@@ -1,9 +1,13 @@
 """An environment wrapper that normalizes action, observation and reward."""
 import akro
+from copy import deepcopy
 import gym
 import gym.spaces
 import gym.spaces.utils
 import numpy as np
+from envs.mujoco.ant_env import AntEnv
+from envs.shapes.push_env.push import PushEnv
+from envs.mujoco.gripper_env import MultipleFetchPickAndPlaceEnv
 
 from envs.utils.akro_wrapper import AkroWrapperTrait
 
@@ -81,20 +85,17 @@ class ConsistentNormalizedEnv(AkroWrapperTrait, gym.Wrapper):
 
 consistent_normalize = ConsistentNormalizedEnv
 
-def get_normalizer_preset(normalizer_type):
+def get_normalizer_preset(env):
     # Precomputed mean and std of the state dimensions from 10000 length-50 random rollouts (without early termination)
-    if normalizer_type == 'off':
-        normalizer_mean = np.array([0.])
-        normalizer_std = np.array([1.])
-    elif normalizer_type == 'half_cheetah_preset':
-        normalizer_mean = np.array(
-            [-0.07861924, -0.08627162, 0.08968642, 0.00960849, 0.02950368, -0.00948337, 0.01661406, -0.05476654,
-             -0.04932635, -0.08061652, -0.05205841, 0.04500197, 0.02638421, -0.04570961, 0.03183838, 0.01736591,
-             0.0091929, -0.0115027])
-        normalizer_std = np.array(
-            [0.4039283, 0.07610687, 0.23817, 0.2515473, 0.2698137, 0.26374814, 0.32229397, 0.2896734, 0.2774097,
-             0.73060024, 0.77360505, 1.5871304, 5.5405455, 6.7097645, 6.8253727, 6.3142195, 6.417641, 5.9759197])
-    elif normalizer_type == 'ant_preset':
+    # elif env_name == 'half_cheetah':
+    #    normalizer_mean = np.array(
+    #        [-0.07861924, -0.08627162, 0.08968642, 0.00960849, 0.02950368, -0.00948337, 0.01661406, -0.05476654,
+    #         -0.04932635, -0.08061652, -0.05205841, 0.04500197, 0.02638421, -0.04570961, 0.03183838, 0.01736591,
+    #         0.0091929, -0.0115027])
+    #    normalizer_std = np.array(
+    #        [0.4039283, 0.07610687, 0.23817, 0.2515473, 0.2698137, 0.26374814, 0.32229397, 0.2896734, 0.2774097,
+    #         0.73060024, 0.77360505, 1.5871304, 5.5405455, 6.7097645, 6.8253727, 6.3142195, 6.417641, 5.9759197])
+    if isinstance(env.unwrapped, AntEnv):
         normalizer_mean = np.array(
             [0.00486117, 0.011312, 0.7022248, 0.8454677, -0.00102548, -0.00300276, 0.00311523, -0.00139029,
              0.8607109, -0.00185301, -0.8556998, 0.00343217, -0.8585605, -0.00109082, 0.8558013, 0.00278213,
@@ -106,4 +107,34 @@ def get_normalizer_preset(normalizer_type):
              0.9870919, 1.7525449, 1.7468817, 1.8596431, 4.502961, 4.4070187, 4.522444, 4.3518476, 4.5105968,
              4.3704205, 4.5175962, 4.3704395])
 
-    return normalizer_mean, normalizer_std
+    elif isinstance(env.unwrapped, MultipleFetchPickAndPlaceEnv):
+        obs_sequence = []
+        relevant_mask = np.zeros(env.observation_space.shape[-1], dtype = bool)
+        relevant_mask[:6] = True
+        for i in range(100):
+            obs = env.reset()
+            obs[:, 4] = (np.random.randn() * 2.0385) 
+            obs_sequence.append(obs[-1][relevant_mask])
+
+            for j in range(50):
+                act = env.action_space.sample()
+                obs, rew, done, info = env.step(act)
+                obs[:, 4] = (np.random.randn() * 2.0385)
+                obs_sequence.append(obs[-1][relevant_mask])
+        
+    elif isinstance(env.unwrapped, PushEnv):
+        obs_sequence = []
+        relevant_mask = np.zeros(env.observation_space.shape[-1], dtype = bool)
+        relevant_mask[-2:] = True
+        for i in range(1_000):
+            obs = env.reset()
+            obs_sequence.append(obs[-1][relevant_mask])
+
+            for j in range(50):
+                act = env.action_space.sample()
+                obs, rew, done, info = env.step(act)
+                obs_sequence.append(obs[-1][relevant_mask])
+    mean, std = np.zeros(relevant_mask.shape), np.ones(relevant_mask.shape)
+    mean[relevant_mask] = np.mean(np.stack(obs_sequence, axis = 0), axis = 0)
+    std[relevant_mask] = np.std(np.stack(obs_sequence, axis = 0), axis = 0)
+    return mean, std
