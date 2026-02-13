@@ -5,7 +5,7 @@ env:
   frame_stack: null
 
 trainer_args:
-  trans_optimization_epochs: 250
+  trans_optimization_epochs: 50
 
 replay_buffer:
   common:
