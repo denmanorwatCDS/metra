@@ -198,21 +198,18 @@ class MultipleFetchPickAndPlaceEnv(MujocoTrait, utils.EzPickle):
         dt = self.sim.nsubsteps * self.sim.model.opt.timestep
 
         # Description of gripper head (on which spatulas are connected)
-        grip_pos, grip_rot = grip_desc['pos'], grip_desc['rot']
+        grip_pos = grip_desc['pos']
 
         # Description of gripper grippers (spatulas, rectangular thing with which gripper grasps object)
         robot_qpos, robot_qvel = gym_robotics_utils.robot_get_obs(self.sim)
         gripper_state = robot_qpos[-2:]
-        gripper_vel = robot_qvel[-2:] * dt  # change to a scalar if the gripper is made symmetric
 
-        objects_description = {'object_pos': [grip_pos], 'object_rot': [grip_rot],
-                               'object_meta': [np.concatenate([gripper_state, gripper_vel], axis = 0)],
+        objects_description = {'object_pos': [grip_pos],
+                               'object_meta': [gripper_state],
                                'object_ohe': [OBJECT_OHE['grip']]}
 
         for name in self.created_object_names:
             objects_description['object_pos'].insert(0, self.sim.data.get_site_xpos(name))
-            # rotations
-            objects_description['object_rot'].insert(0, rotations.mat2euler(self.sim.data.get_site_xmat(name)))
 
             objects_description['object_meta'].insert(0, np.zeros(objects_description['object_meta'][-1].shape))
             

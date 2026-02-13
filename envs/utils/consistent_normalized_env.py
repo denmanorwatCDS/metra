@@ -110,16 +110,14 @@ def get_normalizer_preset(env):
     elif isinstance(env.unwrapped, MultipleFetchPickAndPlaceEnv):
         obs_sequence = []
         relevant_mask = np.zeros(env.observation_space.shape[-1], dtype = bool)
-        relevant_mask[:6] = True
+        relevant_mask[:3] = True
         for i in range(1_000):
             obs = env.reset()
-            obs[:, 4] = (np.random.randn() * 2.0385) 
             obs_sequence.append(obs[-1][relevant_mask])
 
             for j in range(50):
                 act = env.action_space.sample()
                 obs, rew, done, info = env.step(act)
-                obs[:, 4] = (np.random.randn() * 2.0385)
                 obs_sequence.append(obs[-1][relevant_mask])
         
     elif isinstance(env.unwrapped, PushEnv):
