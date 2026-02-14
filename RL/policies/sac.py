@@ -50,7 +50,7 @@ class SAC(torch.nn.Module):
         self.target_critic2 = copy.deepcopy(self.critic2)
         
         self.tau = tau
-        self._target_entropy = -np.prod(env_spec.action_space.shape).item() / 2.
+        self._target_entropy = -1 / 2.
         self.optimizer = Adam(params = self.parameters(), lr = lr)
 
     @property
