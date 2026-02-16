@@ -19,12 +19,14 @@ class FetcherPooler(nn.Module):
         return outp
     
 class TransformerPooler(nn.Module):
-    def __init__(self, obs_length, skill_length, nhead = 4, dim_feedforward = 64, num_layers = 2):
+    def __init__(self, obs_length, skill_length, nhead = 4, dim_feedforward = 256, num_layers = 2):
         super().__init__()
-        self.projector = nn.Linear(obs_length, dim_feedforward)
-        self.q = nn.Sequential(nn.Linear(obs_length + skill_length, dim_feedforward)) 
-        self.k, self.v = nn.Linear(dim_feedforward, dim_feedforward), nn.Linear(dim_feedforward, dim_feedforward)
-        _transformer_pooler = nn.TransformerEncoderLayer(dim_feedforward, nhead = nhead, dim_feedforward = dim_feedforward, 
+        self.projector = nn.Linear(obs_length + skill_length, dim_feedforward)
+        self.q = nn.Linear(obs_length, dim_feedforward) 
+        self.k = nn.Linear(dim_feedforward, dim_feedforward)
+        self.v = nn.Linear(dim_feedforward, dim_feedforward)
+        _transformer_pooler = nn.TransformerEncoderLayer(dim_feedforward, 
+                                                         nhead = nhead, dim_feedforward = dim_feedforward, 
                                                          batch_first = True, norm_first = False)
         self.transformer_pooler = nn.TransformerEncoder(_transformer_pooler, num_layers = num_layers)
         """
@@ -39,15 +41,16 @@ class TransformerPooler(nn.Module):
         # Expecting seq to be of shape [Batch, Seq_len, obs_dim]
         batch_len, seq_len, obs_dim = seq.shape
         # Add readout token
-        processed_seq = self.projector(seq)
-        
+        aligned_skill = torch.unsqueeze(skill, dim = 1).repeat((1, seq_len, 1))
+        skill_seq = torch.cat((seq, aligned_skill), axis = -1)
+        processed_seq = self.projector(skill_seq)
         # Add mark (skill token) so pooler knows to which object skill is applied
         # Returns processed output token
         """
         seq = torch.cat((self.readout_token.expand(batch_len, -1, -1), seq), dim = 1)
         """
         transformed_seq = self.transformer_pooler(processed_seq)
-        query = torch.unsqueeze(self.q(torch.cat([seq[torch.arange(batch_len), obj_idx, :], skill], dim = -1)), dim = 1)
+        query = torch.unsqueeze(self.q(seq[torch.arange(batch_len), obj_idx, :]), dim = 1)
         keys, values = self.k(transformed_seq), self.v(transformed_seq)
         attention = torch.softmax(torch.sum(query * keys, axis=-1, keepdim=True)/sqrt(self.dim_feedforward), dim = -2)
         output = torch.sum(attention * values, axis=-2)
