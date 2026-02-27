@@ -22,9 +22,6 @@ class TransformerPooler(nn.Module):
     def __init__(self, obs_length, skill_length, nhead = 4, dim_feedforward = 256, num_layers = 2):
         super().__init__()
         self.projector = nn.Linear(obs_length + skill_length, dim_feedforward)
-        self.q = nn.Linear(obs_length, dim_feedforward) 
-        self.k = nn.Linear(dim_feedforward, dim_feedforward)
-        self.v = nn.Linear(dim_feedforward, dim_feedforward)
         _transformer_pooler = nn.TransformerEncoderLayer(dim_feedforward, 
                                                          nhead = nhead, dim_feedforward = dim_feedforward, 
                                                          batch_first = True, norm_first = False)
@@ -35,7 +32,7 @@ class TransformerPooler(nn.Module):
         """
         self.obs_dim = obs_length
         self.dim_feedforward = dim_feedforward
-        self.outp_dim = dim_feedforward + skill_length
+        self.outp_dim = dim_feedforward
         
     def forward(self, seq, skill = None, obj_idx = None):
         # Expecting seq to be of shape [Batch, Seq_len, obs_dim]
@@ -49,12 +46,8 @@ class TransformerPooler(nn.Module):
         """
         seq = torch.cat((self.readout_token.expand(batch_len, -1, -1), seq), dim = 1)
         """
-        transformed_seq = self.transformer_pooler(processed_seq)
-        query = torch.unsqueeze(self.q(seq[torch.arange(batch_len), obj_idx, :]), dim = 1)
-        keys, values = self.k(transformed_seq), self.v(transformed_seq)
-        attention = torch.softmax(torch.sum(query * keys, axis=-1, keepdim=True)/sqrt(self.dim_feedforward), dim = -2)
-        output = torch.sum(attention * values, axis=-2)
-        return torch.cat([output, skill], dim=-1)
+        transformed_seq = self.transformer_pooler(processed_seq)[torch.arange(batch_len), obj_idx, :]
+        return transformed_seq
     
 class ConcatPooler(nn.Module):
     def __init__(self, obs_length, obj_qty, skill_length = None):

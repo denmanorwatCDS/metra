@@ -116,10 +116,12 @@ def run():
                    env_kwargs = config.env.env_kwargs, frame_stack = config.env.frame_stack, 
                    seed = config.globals.seed)
     normalizer_mean, normalizer_std = get_normalizer_preset(env)
+
     make_seeded_env = functools.partial(make_env, env_name = config.env.name, 
                                         max_path_length = config.env.max_path_length,
                                         env_kwargs = config.env.env_kwargs,
-                                        frame_stack = config.env.frame_stack)
+                                        frame_stack = config.env.frame_stack,
+                                        normalizer_mean = normalizer_mean, normalizer_std = normalizer_std)
     env = make_seeded_env(seed = config.globals.seed, render_info = False)
     
     # TODO change shape
@@ -257,55 +259,59 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
     obs, terminated, truncated, options, obj_idxs = None, None, None, None, None
     prev_cur_step, cur_step = 0, 0
     for i in range(trainer_config.n_epochs):
-        agent.inference()
-        trajs, obs, terminated, truncated, options, obj_idxs =\
-            continue_random_trajectories_generation(vec_env = env, agent = agent, skill_model = skill_model,
-                                                    total_steps = trainer_config.collection_steps, obs = obs,
-                                                    terminated = terminated, truncated = truncated, options = options,
-                                                    obj_idxs = obj_idxs)
-        
-        prev_cur_step = cur_step
-        cur_step += trainer_config.collection_steps
-        
-        replay_buffer.update_buffer(trajs)
-        replay_buffer.prepare_for_sampling()
-        if (replay_buffer.n_transitions_stored < trainer_config.transitions_before_training):
-            continue
-        
-        agent.train()
-        object_extractor_stats = StatisticsCalculator('extractor')
-        skill_stats = StatisticsCalculator('skill')
-        policy_stats = StatisticsCalculator('policy')
+        try:
+            agent.inference()
+            trajs, obs, terminated, truncated, options, obj_idxs =\
+                continue_random_trajectories_generation(vec_env = env, agent = agent, skill_model = skill_model,
+                                                        total_steps = trainer_config.collection_steps, obs = obs,
+                                                        terminated = terminated, truncated = truncated, options = options,
+                                                        obj_idxs = obj_idxs)
 
-        for i in range(trainer_config.trans_optimization_epochs):
-            # TODO fix me, changing hardcoded batch size to a config one
-            batch = replay_buffer.sample(256)
-            logs = static_object_extractor.optimize_oe(batch['observations'], batch['next_observations'])
-            object_extractor_stats.save_iter(logs)
-            extracted_objects = static_object_extractor.extract(batch['observations'])
-            logs, rewards = skill_model.train_components(observations = batch['observations'], 
-                                                         next_observations = batch['next_observations'],
-                                                         static_objects = extracted_objects,
-                                                         options = batch['options'],
-                                                         obj_idxs = batch['obj_idxs'])
-            skill_stats.save_iter(logs)
-            logs = agent.optimize_op(observations = batch['observations'], next_observations = batch['next_observations'], 
-                                     obj_idxs = batch['obj_idxs'], options = batch['options'], 
-                                     actions = batch['actions'], 
-                                     dones = batch['terminated'], 
-                                     rewards = rewards)
-            policy_stats.save_iter(logs)
-        
-        if (prev_cur_step // trainer_config.log_frequency) < (cur_step // trainer_config.log_frequency):
-            comet_logger.log_metrics(skill_stats.pop_statistics(), step = cur_step)
-            comet_logger.log_metrics(policy_stats.pop_statistics(), step = cur_step)
-            comet_logger.log_metrics(object_extractor_stats.pop_statistics(), step = cur_step)
-        
-        if (prev_cur_step // trainer_config.eval_frequency) < (cur_step // trainer_config.eval_frequency):
-            eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
-                         num_random_trajectories = 48, gamma = agent.discount, 
-                         device = "cuda:0", comet_logger = comet_logger, step = cur_step)
-        prev_cur_step = cur_step
+            prev_cur_step = cur_step
+            cur_step += trainer_config.collection_steps
+
+            replay_buffer.update_buffer(trajs)
+            replay_buffer.prepare_for_sampling()
+            if (replay_buffer.n_transitions_stored < trainer_config.transitions_before_training):
+                continue
+            
+            agent.train()
+            object_extractor_stats = StatisticsCalculator('extractor')
+            skill_stats = StatisticsCalculator('skill')
+            policy_stats = StatisticsCalculator('policy')
+
+            for i in range(trainer_config.trans_optimization_epochs):
+                # TODO fix me, changing hardcoded batch size to a config one
+                batch = replay_buffer.sample(256)
+                logs = static_object_extractor.optimize_oe(batch['observations'], batch['next_observations'])
+                object_extractor_stats.save_iter(logs)
+                extracted_objects = static_object_extractor.extract(batch['observations'])
+                logs, rewards = skill_model.train_components(observations = batch['observations'], 
+                                                             next_observations = batch['next_observations'],
+                                                             static_objects = extracted_objects,
+                                                             options = batch['options'],
+                                                             obj_idxs = batch['obj_idxs'])
+                skill_stats.save_iter(logs)
+                logs = agent.optimize_op(observations = batch['observations'], next_observations = batch['next_observations'], 
+                                         obj_idxs = batch['obj_idxs'], options = batch['options'], 
+                                         actions = batch['actions'], 
+                                         dones = batch['terminated'], 
+                                         rewards = rewards)
+                policy_stats.save_iter(logs)
+
+            if (prev_cur_step // trainer_config.log_frequency) < (cur_step // trainer_config.log_frequency):
+                comet_logger.log_metrics(skill_stats.pop_statistics(), step = cur_step)
+                comet_logger.log_metrics(policy_stats.pop_statistics(), step = cur_step)
+                comet_logger.log_metrics(object_extractor_stats.pop_statistics(), step = cur_step)
+
+            if (prev_cur_step // trainer_config.eval_frequency) < (cur_step // trainer_config.eval_frequency):
+                eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
+                             num_random_trajectories = 48, gamma = agent.discount, 
+                             device = "cuda:0", comet_logger = comet_logger, step = cur_step)
+            prev_cur_step = cur_step
+    
+        except KeyboardInterrupt:
+            env.close()
 
 def render_coordinate_trajectories(n_slots, n_objects, trajectories):
     fig, axs = plt.subplots(nrows = n_slots, ncols = n_objects)
@@ -402,6 +408,7 @@ def eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
         video_trajectories = collect_specific_trajectories(vec_env = video_env, agent = agent, 
                                                            options = video_options, obj_idxs = obj_idxs)
         videos.append(video_trajectories['render'])
+        video_env.close()
 
     agent.train()
     for i, skills_videos in enumerate(videos):
