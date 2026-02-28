@@ -219,7 +219,7 @@ class MultipleFetchPickAndPlaceEnv(MujocoTrait, utils.EzPickle):
         obs = np.concatenate([objects_description[key] for key in objects_description.keys()], axis = -1)
 
         info_dict = {
-            'coordinates': np.stack(objects_description['object_pos'], axis = 0)[:, :-1].astype(np.float32)
+            'coordinates': np.stack(objects_description['object_pos'], axis = 0)[:, :].astype(np.float32)
         }
         return obs.astype(np.float32), info_dict
 
@@ -261,8 +261,8 @@ class MultipleFetchPickAndPlaceEnv(MujocoTrait, utils.EzPickle):
         cur_obs, cur_info_dict = self._get_obs()
 
         info = {}
-        info['before_coordinates'] = np.zeros((len(self.created_object_names) + 1, 2))
-        info['after_coordinates'] = np.zeros((len(self.created_object_names) + 1, 2))
+        info['before_coordinates'] = np.zeros((len(self.created_object_names) + 1, 3))
+        info['after_coordinates'] = np.zeros((len(self.created_object_names) + 1, 3))
         for obj in range(len(self.created_object_names) + 1):
             info['before_coordinates'][obj] = prev_info_dict['coordinates'][obj]
             info['after_coordinates'][obj] = cur_info_dict['coordinates'][obj]
@@ -298,22 +298,6 @@ class MultipleFetchPickAndPlaceEnv(MujocoTrait, utils.EzPickle):
     def env_discretizer(self):
         return lambda x: np.floor(x / 0.1)
 
-# ============= Override of MujocoTrait methods =============
-
-    def _get_coordinates_trajectories(self, trajectories):
-        coordinates_trajectories = {}
-        for trajectory in trajectories:
-            for element in range(trajectory['env_infos']['coordinates'].shape[1] // 3):
-                if element not in coordinates_trajectories:
-                    coordinates_trajectories[element] = []
-                coordinates_trajectories[element].append(\
-                    trajectory['env_infos']['coordinates'][:, element * 3: (element * 3 + 2)])
-                coordinates_trajectories[element][-1] = np.concatenate([coordinates_trajectories[element][-1], 
-                                                                   trajectory['env_infos']['next_coordinates'][:, element * 3: (element * 3 + 2)]],
-                                                                   axis = 0)
-        return coordinates_trajectories
-        
-
 # ============= No change from fetch_env.PickAndPlaceEnv =============
 
     def _viewer_setup(self):
@@ -341,6 +325,3 @@ def get_gripper_description(sim):
             'rot': rotations.mat2euler(sim.data.get_site_xmat('robot0:grip')),
             'velp': sim.data.get_site_xvelp('robot0:grip'),
             'velr': sim.data.get_site_xvelr('robot0:grip')}
-
-def calculate_mean_std(env):
-    action = env.action_space.sample()

@@ -1,26 +1,27 @@
 import numpy as np
 from matplotlib.patches import Ellipse
 
-def render_trajectories(coordinates, colors, plot_axis, ax):
-    min_ax, max_ax = None, None
+def lighten_the_panes(ax):
+    ax.xaxis.set_pane_color((1., 1., 1., 0.2))
+    ax.yaxis.set_pane_color((1., 1., 1., 0.2))
+    ax.zaxis.set_pane_color((1., 1., 1., 0.2))
+
+def render_trajectories(coordinates, colors, min_val, max_val, ax):
+    dim = coordinates[0].shape[-1]
     for trajectory, color in zip(coordinates, colors):
         trajectory = np.array(trajectory)
-        ax.plot(trajectory[:, 0], trajectory[:, 1], color = np.array(color[0]), linewidth=0.7)
-        if min_ax is None and max_ax is None:
-            min_ax, max_ax = np.min(trajectory), np.max(trajectory)
-        else:
-            min_ax, max_ax = min(min_ax, np.min(trajectory)), max(max_ax, np.max(trajectory))
-    offset = (max_ax - min_ax) * 0.1
-    square_axis_limits = np.array([min_ax - offset, max_ax + offset])
-    if plot_axis == 'free':
-        return
-    if plot_axis is None:
-        plot_axis = [square_axis_limits[0], square_axis_limits[1], square_axis_limits[0], square_axis_limits[1]]
-    if plot_axis is not None:
-        ax.axis(plot_axis)
-        ax.set_aspect('equal')
-    else:
-        ax.axis('scaled')
+        if dim == 2:
+            ax.plot(trajectory[:, 0], trajectory[:, 1], color = np.array(color[0]), linewidth=0.7)
+        elif dim == 3:
+            lighten_the_panes(ax)
+            ax.plot(trajectory[:, 0], trajectory[:, 1], trajectory[:, 2], color = np.array(color[0]), linewidth=0.7)
+    
+    offset = (max_val - min_val) * 0.1
+    lim_min, lim_max = min_val - offset, max_val + offset
+    ax.set_xlim(lim_min, lim_max)
+    ax.set_ylim(lim_min, lim_max)
+    if dim == 3:
+        ax.set_zlim(lim_min, lim_max)
 
 def draw_2d_gaussians(means, stddevs, colors, ax, fill=False, alpha=0.8, use_adaptive_axis=False, draw_unit_gaussian=True, plot_axis=None):
     means = np.clip(means, -1000, 1000)

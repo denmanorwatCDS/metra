@@ -258,7 +258,7 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
 
     obs, terminated, truncated, options, obj_idxs = None, None, None, None, None
     prev_cur_step, cur_step = 0, 0
-    for i in range(trainer_config.n_epochs):
+    while cur_step < 30_500_000:
         try:
             agent.inference()
             trajs, obs, terminated, truncated, options, obj_idxs =\
@@ -314,11 +314,14 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
             env.close()
 
 def render_coordinate_trajectories(n_slots, n_objects, trajectories):
-    fig, axs = plt.subplots(nrows = n_slots, ncols = n_objects)
+    projection_dim = ''.join([str(trajectories['coordinate'][0][0].shape[-1]), 'd'])
+    fig, axs = plt.subplots(nrows = n_slots, ncols = n_objects, subplot_kw={"projection": projection_dim})
     fig.set_size_inches(15, 15)
     if isinstance(axs, matplotlib.axes._axes.Axes):
         axs = [[axs]]
     
+    coordinate_array = np.stack(trajectories['coordinate'], axis=0).reshape(-1, int(projection_dim[0]))
+    min_val, max_val = np.min(coordinate_array), np.max(coordinate_array)
     for slot_i in range(n_slots):
         coordinates_of_objects = trajectories['coordinate'][slot_i]
         color = trajectories['color'][slot_i]
@@ -327,7 +330,7 @@ def render_coordinate_trajectories(n_slots, n_objects, trajectories):
             # across trajectories, thus simply copy last options color one additional time
             coordinates = [coordinates_of_objects[episode][:, obj_i] for episode in range(len(coordinates_of_objects))]
             axs[slot_i][obj_i].set_title(f'Slot №{slot_i} Object №{obj_i}')
-            render_trajectories(coordinates, color, None, axs[slot_i][obj_i])
+            render_trajectories(coordinates, color, min_val, max_val, axs[slot_i][obj_i])
     fig.canvas.draw()
     skill_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype = np.uint8)
     skill_img = skill_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))

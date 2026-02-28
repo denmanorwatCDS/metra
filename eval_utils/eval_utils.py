@@ -12,7 +12,7 @@ def get_2d_colors(points, min_point, max_point):
         colors,
         (2 - np.sum(colors, axis=1, keepdims=True)) / 2,
     ))
-    colors = np.clip(colors, 0, 1)
+    colors = np.clip(colors, 0, 1) / 1.35
     colors = np.c_[colors, np.full(len(colors), 0.8)]
 
     return colors
