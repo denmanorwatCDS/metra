@@ -18,10 +18,10 @@ def render_trajectories(coordinates, colors, min_val, max_val, ax):
     
     offset = (max_val - min_val) * 0.1
     lim_min, lim_max = min_val - offset, max_val + offset
-    ax.set_xlim(lim_min, lim_max)
-    ax.set_ylim(lim_min, lim_max)
+    ax.set_xlim(lim_min[0], lim_max[0])
+    ax.set_ylim(lim_min[1], lim_max[1])
     if dim == 3:
-        ax.set_zlim(lim_min, lim_max)
+        ax.set_zlim(lim_min[2], lim_max[2])
 
 def draw_2d_gaussians(means, stddevs, colors, ax, fill=False, alpha=0.8, use_adaptive_axis=False, draw_unit_gaussian=True, plot_axis=None):
     means = np.clip(means, -1000, 1000)

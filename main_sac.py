@@ -324,7 +324,7 @@ def render_coordinate_trajectories(n_slots, n_objects, trajectories):
     coordinate_array = np.concatenate([
         trajectories['coordinate'][i][j].reshape(-1, coord_dim) for i in range(n_slots) for j in range(n_objects)
         ], axis=0)
-    min_val, max_val = np.min(coordinate_array), np.max(coordinate_array)
+    min_val, max_val = np.min(coordinate_array, axis = 0), np.max(coordinate_array, axis = 0)
     for slot_i in range(n_slots):
         coordinates_of_objects = trajectories['coordinate'][slot_i]
         color = trajectories['color'][slot_i]
