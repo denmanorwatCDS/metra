@@ -6,7 +6,7 @@ env:
 
 trainer_args:
   trans_optimization_epochs: 50
-  eval_frequency: 20_000
+  eval_frequency: 250_000
 
 replay_buffer:
   common:
