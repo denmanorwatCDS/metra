@@ -314,14 +314,16 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
             env.close()
 
 def render_coordinate_trajectories(n_slots, n_objects, trajectories):
-    projection_dim = ''.join([str(trajectories['coordinate'][0][0].shape[-1]), 'd'])
-    projection_dim = None if projection_dim != '3d' else projection_dim
+    coord_dim = trajectories['coordinate'][0][0].shape[-1]
+    projection_dim = None if coord_dim != 3 else '3d'
     fig, axs = plt.subplots(nrows = n_slots, ncols = n_objects, subplot_kw={"projection": projection_dim})
     fig.set_size_inches(15, 15)
     if isinstance(axs, matplotlib.axes._axes.Axes):
         axs = [[axs]]
     
-    coordinate_array = np.stack(trajectories['coordinate'], axis=0).reshape(-1, int(projection_dim[0]))
+    coordinate_array = np.concatenate([
+        trajectories['coordinate'][i][j].reshape(-1, coord_dim) for i in range(n_slots) for j in range(n_objects)
+        ], axis=0)
     min_val, max_val = np.min(coordinate_array), np.max(coordinate_array)
     for slot_i in range(n_slots):
         coordinates_of_objects = trajectories['coordinate'][slot_i]
