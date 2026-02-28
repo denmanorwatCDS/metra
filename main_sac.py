@@ -315,6 +315,7 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
 
 def render_coordinate_trajectories(n_slots, n_objects, trajectories):
     projection_dim = ''.join([str(trajectories['coordinate'][0][0].shape[-1]), 'd'])
+    projection_dim = None if projection_dim != '3d' else projection_dim
     fig, axs = plt.subplots(nrows = n_slots, ncols = n_objects, subplot_kw={"projection": projection_dim})
     fig.set_size_inches(15, 15)
     if isinstance(axs, matplotlib.axes._axes.Axes):
