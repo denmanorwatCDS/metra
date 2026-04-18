@@ -29,3 +29,4 @@ spriteworld
 swig==3.0.12
 torch==2.0.1
 tyro==0.8.5
+setuptools==80
