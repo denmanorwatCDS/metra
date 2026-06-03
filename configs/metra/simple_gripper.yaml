@@ -1,0 +1,32 @@
+env:
+  name: "decoupled_gripper"
+  max_path_length: 100
+  env_kwargs: null
+  frame_stack: null
+
+trainer_args:
+  trans_optimization_epochs: 50
+  eval_frequency: 250_000
+
+replay_buffer:
+  common:
+    max_transitions: 1000000
+
+rl_algo:
+  slot_pooler:
+    name: Concat
+    kwargs: {}
+
+static_object_extractor:
+  type: 'Identity'
+
+skill:
+  slot_pooler:
+    name: Concat
+    kwargs: {}
+  trajectory_encoder:
+    type: single
+    dim_option: ${skill.dim_option}
+    net:
+      hidden_sizes: ${globals.mlp_arch}
+      hidden_nonlinearity: ReLU
