@@ -57,4 +57,4 @@ trainer_args:
   transitions_before_training: 10_000
   log_frequency: 50_000
   eval_frequency: 250_000
-  checkpoint_folder: /home/dvasilev
+  checkpoint_folder: /home/dvasilev/models

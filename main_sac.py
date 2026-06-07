@@ -303,6 +303,10 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
                 comet_logger.log_metrics(skill_stats.pop_statistics(), step = cur_step)
                 comet_logger.log_metrics(policy_stats.pop_statistics(), step = cur_step)
                 comet_logger.log_metrics(object_extractor_stats.pop_statistics(), step = cur_step)
+                torch.save(agent.state_dict(), f'{trainer_config.checkpoint_folder}/agent/seed:{seed}.pth')
+                torch.save(skill_model.state_dict(), f'{trainer_config.checkpoint_folder}/skill_model/seed:{seed}.pth')
+                with open(f'{trainer_config.checkpoint_folder}/seed:{seed}.txt', 'w') as f:
+                    f.write('Current step: {}'.format(cur_step))
 
             if (prev_cur_step // trainer_config.eval_frequency) < (cur_step // trainer_config.eval_frequency):
                 eval_metrics(make_env_fn, agent, skill_model, static_object_extractor,
