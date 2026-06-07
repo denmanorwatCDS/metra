@@ -298,7 +298,7 @@ def train_cycle(trainer_config, agent, skill_model, static_object_extractor,
                                          dones = batch['terminated'], 
                                          rewards = rewards)
                 policy_stats.save_iter(logs)
-
+            
             if (prev_cur_step // trainer_config.log_frequency) < (cur_step // trainer_config.log_frequency):
                 comet_logger.log_metrics(skill_stats.pop_statistics(), step = cur_step)
                 comet_logger.log_metrics(policy_stats.pop_statistics(), step = cur_step)
